@@ -6,6 +6,7 @@ ENV PYTHONUNBUFFERED=1
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget curl ca-certificates unzip \
     xvfb \
+    xauth \
     python3 python3-pip \
     libglib2.0-0 libpng16-16 \
     libsm6 libxrender1 libxext6 libx11-6 \
