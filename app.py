@@ -5,7 +5,8 @@ import subprocess
 import tempfile
 import shutil
 import os
-from music21 import converter, interval
+import time
+from music21 import converter, stream, clef, metadata, chord, key, interval, meter, tempo
 
 app = FastAPI(title="MuseConvert Backend")
 
@@ -23,20 +24,18 @@ def health():
     return {"status": "ok"}
 
 # ----------------------------------------
-# Debug — inspect live container
+# Debug
 # ----------------------------------------
 @app.get("/debug")
 def debug():
     results = {}
     results["mscore_exists"] = Path(MUSESCORE_CLI).exists()
-    r = subprocess.run(["java", "-version"], capture_output=True, text=True)
-    results["java_version"] = r.stderr.strip()
     r = subprocess.run([MUSESCORE_CLI, "--version"], capture_output=True, text=True)
     results["mscore_version"] = r.stdout.strip() or r.stderr.strip()
     return results
 
 # ----------------------------------------
-# Transposition — interval-based (source -> concert -> target)
+# Transposition intervals
 # ----------------------------------------
 def get_transpose_intervals(original_inst, final_inst):
     intvl_1 = None
@@ -153,31 +152,128 @@ def get_transpose_intervals(original_inst, final_inst):
     return intvl_1, intvl_2
 
 # ----------------------------------------
+# Clef map
+# ----------------------------------------
+TREBLE_INSTRUMENTS = {
+    "Piccolo", "Flute", "Alto Flute", "Oboe", "Oboe d'amore",
+    "English Horn", "Heckelphone", "Bass Oboe",
+    "Clarinet in Bb", "Clarinet in A", "Clarinet in Eb",
+    "Basset Horn", "Bass Clarinet",
+    "Saxophone Bb Soprano", "Saxophone Eb Alto",
+    "Saxophone Bb Tenor", "Saxophone Eb Baritone",
+    "Saxophone Bb Bass", "Saxophone Eb Contrabass",
+    "Horn in F", "Trumpet in C", "Trumpet in Bb", "Trumpet in A",
+    "Piccolo Trumpet Bb", "Piccolo Trumpet A",
+    "Cornet in Bb", "Flugelhorn", "Posthorn", "Pocket Trumpet",
+    "Alto Trombone",
+    "Xylophone", "Marimba", "Orchestra Bells",
+    "Glockenspiel", "Vibraphone", "Chimes",
+    "Guitar", "Violin",
+}
+
+ALTO_INSTRUMENTS = {"Viola"}
+
+BASS_INSTRUMENTS = {
+    "Cello", "Double Bass", "Bassoon", "Contrabassoon",
+    "Tenor Trombone", "Bass Trombone", "Contrabass Trombone",
+    "Euphonium", "Tenor Tuba", "Tuba Bb", "Tuba Eb",
+    "Timpani",
+}
+
+def get_clef(instrument_name: str):
+    if instrument_name in ALTO_INSTRUMENTS:
+        return clef.AltoClef()
+    elif instrument_name in BASS_INSTRUMENTS:
+        return clef.BassClef()
+    else:
+        return clef.TrebleClef()
+
+# ----------------------------------------
+# Core processing
+# ----------------------------------------
+def process_score(input_path: Path, original_inst: str, final_inst: str, stem: str) -> stream.Score:
+    i1, i2 = get_transpose_intervals(original_inst, final_inst)
+    semitones_total = i1.semitones + i2.semitones
+    transp_intvl = interval.Interval(semitones_total)
+
+    score = converter.parse(str(input_path))
+    original_part = score.parts[0]
+    transposed = original_part.transpose(transp_intvl)
+
+    # Build clean part
+    new_part = stream.Part()
+    new_part.partName = final_inst
+
+    # Clef
+    new_part.insert(0, get_clef(final_inst))
+
+    # Key signature
+    orig_key = score.analyze('key')
+    new_key_obj = orig_key.transpose(transp_intvl)
+    new_key_sig = key.KeySignature(new_key_obj.sharps)
+    new_part.insert(0.1, new_key_sig)
+
+    # Time signature
+    time_sig = transposed.recurse().getElementsByClass(meter.TimeSignature).first()
+    if time_sig:
+        new_part.insert(0.2, time_sig)
+
+    # Tempo
+    tempo_mark = transposed.recurse().getElementsByClass(tempo.MetronomeMark).first()
+    if tempo_mark:
+        new_part.insert(0.3, tempo_mark)
+
+    # Copy measures, strip old clefs
+    for measure in transposed.getElementsByClass(stream.Measure):
+        for c in measure.recurse().getElementsByClass(clef.Clef):
+            measure.remove(c)
+        new_part.append(measure)
+
+    # Enharmonic respelling
+    for n in new_part.recurse().notes:
+        n.pitch = n.pitch.simplifyEnharmonic()
+    for ch in new_part.recurse().getElementsByClass(chord.Chord):
+        ch.pitches = [p.simplifyEnharmonic() for p in ch.pitches]
+
+    # Drop trailing empty measures
+    measures = list(new_part.getElementsByClass(stream.Measure))
+    for m in reversed(measures):
+        if len(m.notesAndRests) == 0 or all(n.isRest for n in m.notesAndRests):
+            new_part.remove(m)
+        else:
+            break
+
+    # Final score
+    new_score = stream.Score()
+    new_score.metadata = metadata.Metadata()
+    new_score.metadata.title = f"{stem} ({final_inst} Transcription)"
+    new_score.metadata.composer = "Arranged by MuseConvert"
+    new_score.insert(0, new_part)
+
+    return new_score
+
+# ----------------------------------------
 # MuseScore: MusicXML -> PDF
 # ----------------------------------------
 def run_musescore_to_pdf(musicxml_path: Path, out_dir: Path) -> Path:
     out_pdf = out_dir / f"{musicxml_path.stem}.pdf"
-    
+
     env = os.environ.copy()
-    env["DISPLAY"] = ":99"
     env["QT_QPA_PLATFORM"] = "offscreen"
-    
-    # Start Xvfb manually
+
     xvfb = subprocess.Popen(
         ["Xvfb", ":99", "-screen", "0", "1280x1024x24"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL
     )
-    
+    env["DISPLAY"] = ":99"
+
     try:
-        import time
-        time.sleep(1)  # Give Xvfb time to start
-        
+        time.sleep(1)
         result = subprocess.run(
             [MUSESCORE_CLI, str(musicxml_path), "-o", str(out_pdf)],
             capture_output=True, text=True, timeout=120, env=env
         )
-        
         if result.returncode != 0:
             raise RuntimeError(
                 f"MuseScore failed (exit {result.returncode}):\n"
@@ -190,7 +286,7 @@ def run_musescore_to_pdf(musicxml_path: Path, out_dir: Path) -> Path:
         xvfb.terminate()
 
 # ----------------------------------------
-# Convert endpoint — accepts MusicXML or MXL
+# Convert endpoint
 # ----------------------------------------
 @app.post("/convert")
 async def convert_file(
@@ -199,7 +295,6 @@ async def convert_file(
     original_instrument: str = Form(...),
     final_instrument: str = Form(...),
 ):
-    # Validate file type
     filename = file.filename or ""
     if not filename.lower().endswith((".xml", ".mxl", ".musicxml")):
         return JSONResponse(
@@ -213,16 +308,13 @@ async def convert_file(
         input_path = temp_dir / filename
         input_path.write_bytes(await file.read())
 
-        # Transpose with music21
-        i1, i2 = get_transpose_intervals(original_instrument, final_instrument)
-        score = converter.parse(str(input_path))
-        score.transpose(i1, inPlace=True)
-        score.transpose(i2, inPlace=True)
+        new_score = process_score(
+            input_path, original_instrument, final_instrument, input_path.stem
+        )
 
         transposed_xml = temp_dir / f"transposed_{input_path.stem}.musicxml"
-        score.write("musicxml", fp=str(transposed_xml))
+        new_score.write("musicxml", fp=str(transposed_xml))
 
-        # Convert to PDF via MuseScore
         pdf_out = run_musescore_to_pdf(transposed_xml, temp_dir)
 
         background_tasks.add_task(shutil.rmtree, str(temp_dir), True)
