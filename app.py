@@ -34,6 +34,39 @@ def debug():
     results["mscore_version"] = r.stdout.strip() or r.stderr.strip()
     return results
 
+@app.post("/debug-process")
+async def debug_process(
+    file: UploadFile = File(...),
+    original_instrument: str = Form(...),
+    final_instrument: str = Form(...),
+):
+    temp_dir = Path(tempfile.mkdtemp(prefix="museconvert_debug_"))
+    try:
+        filename = file.filename or "upload.mxl"
+        input_path = temp_dir / filename
+        input_path.write_bytes(await file.read())
+
+        try:
+            new_score = process_score(
+                input_path, original_instrument, final_instrument, input_path.stem
+            )
+            transposed_xml = temp_dir / f"transposed_{input_path.stem}.musicxml"
+            new_score.write("musicxml", fp=str(transposed_xml))
+            return {
+                "status": "music21_ok",
+                "xml_exists": transposed_xml.exists(),
+                "xml_size": transposed_xml.stat().st_size if transposed_xml.exists() else 0,
+            }
+        except Exception as e:
+            import traceback
+            return {
+                "status": "error",
+                "error": str(e)[:1000],
+                "traceback": traceback.format_exc()[-2000:],
+            }
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
 # ----------------------------------------
 # Transposition intervals
 # ----------------------------------------
