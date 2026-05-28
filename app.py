@@ -263,9 +263,9 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
         new_part.append(measure)
 
     # Enharmonic respelling
-    for n in new_part.recurse().notes:
+    for n in new_part.recurse().getElementsByClass('Note'):
         n.pitch = n.pitch.simplifyEnharmonic()
-    for ch in new_part.recurse().getElementsByClass(chord.Chord):
+    for ch in new_part.recurse().getElementsByClass('Chord'):
         ch.pitches = [p.simplifyEnharmonic() for p in ch.pitches]
 
     # Drop trailing empty measures
