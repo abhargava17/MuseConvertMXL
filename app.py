@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://your-vercel-app.vercel.app"],  # or ["*"] while testing
+    allow_origins=["project-rilup.vercel.app"],  # or ["*"] while testing
     allow_methods=["*"],
     allow_headers=["*"],
 )
