@@ -10,6 +10,15 @@ from music21 import converter, stream, clef, metadata, chord, key, interval, met
 
 app = FastAPI(title="MuseConvert Backend")
 
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://your-vercel-app.vercel.app"],  # or ["*"] while testing
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 MUSESCORE_CLI = os.getenv("MUSESCORE_CLI", "/opt/musescore/bin/mscore4portable")
 
 # ----------------------------------------
