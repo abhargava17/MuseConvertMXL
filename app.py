@@ -200,17 +200,15 @@ def get_transpose_intervals(original_inst, final_inst):
 # ----------------------------------------
 # Clef map
 # ----------------------------------------
-TREBLE_INSTRUMENTS = {...}
-ALTO_INSTRUMENTS = {"Viola"}
-BASS_INSTRUMENTS = {...}
 
 def get_clef(instrument_name: str):
-    if instrument_name in ALTO_INSTRUMENTS:
-        return clef.AltoClef()
-    elif instrument_name in BASS_INSTRUMENTS:
-        return clef.BassClef()
-    else:
+    if instrument_name in ["Violin", "Piccolo", "Flute", "Oboe", "Clarinet in Bb", "Trumpet in C", "Trumpet in Bb", "Saxophone Bb Soprano", "Saxophone Eb Alto", "Saxophone Bb Tenor", "Saxophone Eb Baritone"]:
         return clef.TrebleClef()
+    elif instrument_name in ["Viola"]:
+        return clef.AltoClef()
+    elif instrument_name in ["Cello", "Double Bass", "Bassoon", "Contrabassoon", "Tuba Bb", "Tuba Eb", "Tenor Tuba", "Euphonium", "Bass Trombone", "Contrabass Trombone"]:
+        return clef.BassClef()
+
 
 # ----------------------------------------
 # Core processing
@@ -289,8 +287,7 @@ def run_musescore_to_pdf(musicxml_path: Path, out_dir: Path) -> Path:
             [
                 MUSESCORE_CLI,
                 str(musicxml_path),
-                "--layout",                     # <--- FIX
-                "-S", STYLE_FILE,               # <--- FIX
+                "--score-style", STYLE_FILE,   # MuseScore 4 correct flag
                 "-o", str(out_pdf)
             ],
             capture_output=True, text=True, timeout=120, env=env
