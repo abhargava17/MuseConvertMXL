@@ -45,17 +45,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ----------------------------------------
 # Install FULL MuseScore 4 AppImage
 # ----------------------------------------
-RUN wget -q \
-    "https://github.com/musescore/MuseScore/releases/download/v4.4.4/MuseScore-Studio-4.4.4.243461245-x86_64.AppImage" \
-    -O /tmp/musescore.AppImage \
-    && chmod +x /tmp/musescore.AppImage \
-    && cd /tmp \
-    && ./musescore.AppImage --appimage-extract \
-    && mv /tmp/squashfs-root /opt/musescore \
-    && rm /tmp/musescore.AppImage
+RUN wget -q https://github.com/musescore/MuseScore/releases/download/v4.4.4/mscore4-cli-linux-x86_64.tar.gz \
+    -O /tmp/mscore4-cli.tar.gz \
+    && mkdir -p /opt/musescore-cli \
+    && tar -xzf /tmp/mscore4-cli.tar.gz -C /opt/musescore-cli \
+    && rm /tmp/mscore4-cli.tar.gz
 
-# Use the full AppRun binary (NOT mscore4portable)
-ENV MUSESCORE_CLI=/opt/musescore/AppRun
+ENV MUSESCORE_CLI=/opt/musescore-cli/mscore4-cli
 
 # ----------------------------------------
 # App
