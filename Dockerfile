@@ -1,14 +1,8 @@
 FROM debian:12-slim
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV PYTHONUNBUFFERED=1
-
-# ----------------------------------------
-# System dependencies
-# ----------------------------------------
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget curl ca-certificates unzip \
-    xvfb xauth \
     python3 python3-pip \
     libglib2.0-0 libpng16-16 \
     libsm6 libxrender1 libxext6 libx11-6 \
@@ -42,31 +36,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libopengl0 \
     && rm -rf /var/lib/apt/lists/*
 
-# ----------------------------------------
-# Install FULL MuseScore 4 AppImage
-# ----------------------------------------
-RUN wget -q https://github.com/musescore/MuseScore/releases/download/v4.4.4/mscore4-cli-linux-x86_64.tar.gz \
-    -O /tmp/mscore4-cli.tar.gz \
-    && mkdir -p /opt/musescore-cli \
-    && tar -xzf /tmp/mscore4-cli.tar.gz -C /opt/musescore-cli \
-    && rm /tmp/mscore4-cli.tar.gz
+# Download MuseScore AppImage and extract it
+RUN wget -q \
+    "https://github.com/musescore/MuseScore/releases/download/v4.4.4/MuseScore-Studio-4.4.4.243461245-x86_64.AppImage" \
+    -O /tmp/musescore.AppImage \
+    && chmod +x /tmp/musescore.AppImage \
+    && cd /tmp \
+    && ./musescore.AppImage --appimage-extract \
+    && mv /tmp/squashfs-root /opt/musescore \
+    && rm /tmp/musescore.AppImage
 
-ENV MUSESCORE_CLI=/opt/musescore-cli/mscore4-cli
+# Use the portable binary directly (headless mode)
+ENV MUSESCORE_CLI=/opt/musescore/bin/mscore4portable
+ENV QT_QPA_PLATFORM=offscreen
 
-# ----------------------------------------
-# App
-# ----------------------------------------
 WORKDIR /app
 
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
 COPY app.py .
-# <-- REQUIRED for engraving fixes
-COPY styles/ /app/styles/     
 
-RUN mkdir -p /app/data
+# Copy engraving style files
+COPY styles/ /app/styles/
 
-EXPOSE 10000
-
-CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port 10000"]
+CMD ["python3", "app.py"]
