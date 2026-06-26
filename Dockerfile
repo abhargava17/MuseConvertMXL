@@ -66,7 +66,8 @@ COPY requirements.txt .
 RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
 COPY app.py .
-COPY styles/ /app/styles/     # <-- REQUIRED for engraving fixes
+# <-- REQUIRED for engraving fixes
+COPY styles/ /app/styles/     
 
 RUN mkdir -p /app/data
 
