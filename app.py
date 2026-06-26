@@ -22,8 +22,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-MUSESCORE_CLI = os.getenv("MUSESCORE_CLI", "/opt/musescore/bin/mscore4portable")
-STYLE_FILE = "/app/styles/default.mss"   # <--- NEW
+# IMPORTANT: Using full MuseScore AppImage (AppRun)
+MUSESCORE_CLI = os.getenv("MUSESCORE_CLI", "/opt/musescore/AppRun")
+
+# Style file for engraving fixes
+STYLE_FILE = "/app/styles/default.mss"
 
 # ----------------------------------------
 # Health + Root
@@ -75,10 +78,7 @@ async def debug_process(
             return {
                 "status": "error",
                 "error": str(e)[:1000],
-                "traceback": traceback.format_exc()[-2000:],
-            }
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
+                "traceback": 
 
 # ----------------------------------------
 # Transposition intervals
@@ -200,7 +200,6 @@ def get_transpose_intervals(original_inst, final_inst):
 # ----------------------------------------
 # Clef map
 # ----------------------------------------
-
 def get_clef(instrument_name: str):
     if instrument_name in ["Violin", "Piccolo", "Flute", "Oboe", "Clarinet in Bb", "Trumpet in C", "Trumpet in Bb", "Saxophone Bb Soprano", "Saxophone Eb Alto", "Saxophone Bb Tenor", "Saxophone Eb Baritone"]:
         return clef.TrebleClef()
@@ -208,7 +207,6 @@ def get_clef(instrument_name: str):
         return clef.AltoClef()
     elif instrument_name in ["Cello", "Double Bass", "Bassoon", "Contrabassoon", "Tuba Bb", "Tuba Eb", "Tenor Tuba", "Euphonium", "Bass Trombone", "Contrabass Trombone"]:
         return clef.BassClef()
-
 
 # ----------------------------------------
 # Core processing
@@ -266,7 +264,7 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
     return new_score
 
 # ----------------------------------------
-# MuseScore: MusicXML -> PDF (FIXED)
+# MuseScore: MusicXML -> PDF (FINAL FIXED VERSION)
 # ----------------------------------------
 def run_musescore_to_pdf(musicxml_path: Path, out_dir: Path) -> Path:
     out_pdf = out_dir / f"{musicxml_path.stem}.pdf"
@@ -287,7 +285,7 @@ def run_musescore_to_pdf(musicxml_path: Path, out_dir: Path) -> Path:
             [
                 MUSESCORE_CLI,
                 str(musicxml_path),
-                "--score-style", STYLE_FILE,   # MuseScore 4 correct flag
+                "--style", STYLE_FILE,   # <-- CORRECT FLAG FOR MUSESCORE 4
                 "-o", str(out_pdf)
             ],
             capture_output=True, text=True, timeout=120, env=env
