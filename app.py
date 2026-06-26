@@ -272,37 +272,27 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
 def run_musescore_to_pdf(musicxml_path: Path, out_dir: Path) -> Path:
     out_pdf = out_dir / f"{musicxml_path.stem}.pdf"
 
-    env = os.environ.copy()
-    env["QT_QPA_PLATFORM"] = "offscreen"
-
-    xvfb = subprocess.Popen(
-        ["Xvfb", ":99", "-screen", "0", "1280x1024x24"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+    result = subprocess.run(
+        [
+            MUSESCORE_CLI,
+            str(musicxml_path),
+            "--style", STYLE_FILE,
+            "-o", str(out_pdf)
+        ],
+        capture_output=True, text=True, timeout=120
     )
-    env["DISPLAY"] = ":99"
 
-    try:
-        time.sleep(1)
-        result = subprocess.run(
-            [
-                MUSESCORE_CLI,
-                str(musicxml_path),
-                "--style", STYLE_FILE,   # <-- CORRECT FLAG FOR MUSESCORE 4
-                "-o", str(out_pdf)
-            ],
-            capture_output=True, text=True, timeout=120, env=env
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"MuseScore failed (exit {result.returncode}):\n"
+            f"STDOUT:\n{result.stdout[-1000:]}\n"
+            f"STDERR:\n{result.stderr[-1000:]}"
         )
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"MuseScore failed (exit {result.returncode}):\n"
-                f"STDOUT:\n{result.stdout[-1000:]}\nSTDERR:\n{result.stderr[-1000:]}"
-            )
-        if not out_pdf.exists():
-            raise FileNotFoundError("MuseScore did not produce a PDF")
-        return out_pdf
-    finally:
-        xvfb.terminate()
+
+    if not out_pdf.exists():
+        raise FileNotFoundError("MuseScore did not produce a PDF")
+
+    return out_pdf
 
 # ----------------------------------------
 # Convert endpoint
