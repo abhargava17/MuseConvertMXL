@@ -78,7 +78,10 @@ async def debug_process(
             return {
                 "status": "error",
                 "error": str(e)[:1000],
-                "traceback": 
+                "traceback": traceback.format_exc()[-2000:]
+            }
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True
 
 # ----------------------------------------
 # Transposition intervals
