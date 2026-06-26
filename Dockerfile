@@ -3,6 +3,9 @@ FROM debian:12-slim
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 
+# ----------------------------------------
+# System dependencies
+# ----------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget curl ca-certificates unzip \
     xvfb xauth \
@@ -40,7 +43,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ----------------------------------------
-# MuseScore 4.4.4 via AppImage
+# Install FULL MuseScore 4 AppImage
 # ----------------------------------------
 RUN wget -q \
     "https://github.com/musescore/MuseScore/releases/download/v4.4.4/MuseScore-Studio-4.4.4.243461245-x86_64.AppImage" \
@@ -51,16 +54,22 @@ RUN wget -q \
     && mv /tmp/squashfs-root /opt/musescore \
     && rm /tmp/musescore.AppImage
 
-ENV MUSESCORE_CLI=/opt/musescore/bin/mscore4portable
+# Use the full AppRun binary (NOT mscore4portable)
+ENV MUSESCORE_CLI=/opt/musescore/AppRun
 
 # ----------------------------------------
 # App
 # ----------------------------------------
 WORKDIR /app
+
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
+
 COPY app.py .
+COPY styles/ /app/styles/     # <-- REQUIRED for engraving fixes
+
 RUN mkdir -p /app/data
 
 EXPOSE 10000
+
 CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port 10000"]
