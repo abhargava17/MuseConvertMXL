@@ -340,3 +340,7 @@ async def convert_file(
     except (FileNotFoundError, RuntimeError) as e:
         shutil.rmtree(temp_dir, ignore_errors=True)
         return JSONResponse(status_code=500, content={"error": str(e)[:500]})
+
+if __name__ == "__main__":
+    import uvicorn, os
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
