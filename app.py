@@ -23,7 +23,7 @@ app.add_middleware(
 )
 
 # IMPORTANT: Using full MuseScore AppImage (AppRun)
-MUSESCORE_CLI = "/opt/musescore/AppRun"
+MUSESCORE_CLI = "/opt/musescore/mscore"
 
 # Style file for engraving fixes
 STYLE_FILE = "/app/styles/default.mss"
