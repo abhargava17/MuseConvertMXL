@@ -1,9 +1,10 @@
 FROM debian:12-slim
 
-# Install system dependencies (MuseScore 3 only needs Qt5 libs)
+# Install system dependencies + FUSE2 (required for MuseScore 3 AppImage)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget curl ca-certificates unzip \
     python3 python3-pip \
+    fuse libfuse2 \
     libglib2.0-0 libpng16-16 \
     libsm6 libxrender1 libxext6 libx11-6 \
     libxcb1 libglu1-mesa libdbus-1-3 \
@@ -46,7 +47,6 @@ RUN wget -q \
     && mv /tmp/squashfs-root /opt/musescore \
     && rm /tmp/musescore.AppImage
 
-# MuseScore 3 AppRun works headless without X11
 ENV QT_QPA_PLATFORM=offscreen
 
 WORKDIR /app
