@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsm6 libxrender1 libxext6 libx11-6 \
     libxcb1 libglu1-mesa libdbus-1-3 \
     libnss3 libatk1.0-0 libatk-bridge2.0-0 \
-    libcups2 libdrm2 libxkbcommon0 \
+    libcups2 libdrm2 libxkbcommon0 libxkbcommon-x11-0 \
     libxcomposite1 libxdamage1 libxfixes3 \
     libxrandr2 libgbm1 libasound2 \
     libegl1 libegl-mesa0 \
