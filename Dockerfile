@@ -4,6 +4,7 @@ FROM debian:12-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget curl ca-certificates unzip \
     python3 python3-pip \
+    xz-utils \
     libglib2.0-0 libpng16-16 \
     libsm6 libxrender1 libxext6 libx11-6 \
     libxcb1 libglu1-mesa libdbus-1-3 \
