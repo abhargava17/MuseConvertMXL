@@ -15,18 +15,14 @@ from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://project-rilup.vercel.app",
-        "http://localhost:3000"
+    "https://project-rilup.vercel.app",
+    "http://localhost:3000"
     ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# IMPORTANT: Using full MuseScore AppImage (AppRun)
-MUSESCORE_CLI = "/opt/musescore/mscore"
-
-# Style file for engraving fixes
-STYLE_FILE = "/app/styles/default.mss"
+MUSESCORE_CLI = os.getenv("MUSESCORE_CLI", "/opt/musescore/bin/mscore4portable")
 
 # ----------------------------------------
 # Health + Root
@@ -78,7 +74,7 @@ async def debug_process(
             return {
                 "status": "error",
                 "error": str(e)[:1000],
-                "traceback": traceback.format_exc()[-2000:]
+                "traceback": traceback.format_exc()[-2000:],
             }
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -203,13 +199,39 @@ def get_transpose_intervals(original_inst, final_inst):
 # ----------------------------------------
 # Clef map
 # ----------------------------------------
+TREBLE_INSTRUMENTS = {
+    "Piccolo", "Flute", "Alto Flute", "Oboe", "Oboe d'amore",
+    "English Horn", "Heckelphone", "Bass Oboe",
+    "Clarinet in Bb", "Clarinet in A", "Clarinet in Eb",
+    "Basset Horn", "Bass Clarinet",
+    "Saxophone Bb Soprano", "Saxophone Eb Alto",
+    "Saxophone Bb Tenor", "Saxophone Eb Baritone",
+    "Saxophone Bb Bass", "Saxophone Eb Contrabass",
+    "Horn in F", "Trumpet in C", "Trumpet in Bb", "Trumpet in A",
+    "Piccolo Trumpet Bb", "Piccolo Trumpet A",
+    "Cornet in Bb", "Flugelhorn", "Posthorn", "Pocket Trumpet",
+    "Alto Trombone",
+    "Xylophone", "Marimba", "Orchestra Bells",
+    "Glockenspiel", "Vibraphone", "Chimes",
+    "Guitar", "Violin",
+}
+
+ALTO_INSTRUMENTS = {"Viola"}
+
+BASS_INSTRUMENTS = {
+    "Cello", "Double Bass", "Bassoon", "Contrabassoon",
+    "Tenor Trombone", "Bass Trombone", "Contrabass Trombone",
+    "Euphonium", "Tenor Tuba", "Tuba Bb", "Tuba Eb",
+    "Timpani",
+}
+
 def get_clef(instrument_name: str):
-    if instrument_name in ["Violin", "Piccolo", "Flute", "Oboe", "Clarinet in Bb", "Trumpet in C", "Trumpet in Bb", "Saxophone Bb Soprano", "Saxophone Eb Alto", "Saxophone Bb Tenor", "Saxophone Eb Baritone"]:
-        return clef.TrebleClef()
-    elif instrument_name in ["Viola"]:
+    if instrument_name in ALTO_INSTRUMENTS:
         return clef.AltoClef()
-    elif instrument_name in ["Cello", "Double Bass", "Bassoon", "Contrabassoon", "Tuba Bb", "Tuba Eb", "Tenor Tuba", "Euphonium", "Bass Trombone", "Contrabass Trombone"]:
+    elif instrument_name in BASS_INSTRUMENTS:
         return clef.BassClef()
+    else:
+        return clef.TrebleClef()
 
 # ----------------------------------------
 # Core processing
@@ -223,34 +245,42 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
     original_part = score.parts[0]
     transposed = original_part.transpose(transp_intvl)
 
+    # Build clean part
     new_part = stream.Part()
     new_part.partName = final_inst
 
+    # Clef
     new_part.insert(0, get_clef(final_inst))
 
+    # Key signature
     orig_key = score.analyze('key')
     new_key_obj = orig_key.transpose(transp_intvl)
     new_key_sig = key.KeySignature(new_key_obj.sharps)
     new_part.insert(0.1, new_key_sig)
 
+    # Time signature
     time_sig = transposed.recurse().getElementsByClass(meter.TimeSignature).first()
     if time_sig:
         new_part.insert(0.2, time_sig)
 
+    # Tempo
     tempo_mark = transposed.recurse().getElementsByClass(tempo.MetronomeMark).first()
     if tempo_mark:
         new_part.insert(0.3, tempo_mark)
 
+    # Copy measures, strip old clefs
     for measure in transposed.getElementsByClass(stream.Measure):
         for c in measure.recurse().getElementsByClass(clef.Clef):
             measure.remove(c)
         new_part.append(measure)
 
+    # Enharmonic respelling
     for n in new_part.recurse().getElementsByClass('Note'):
         n.pitch = n.pitch.simplifyEnharmonic()
     for ch in new_part.recurse().getElementsByClass('Chord'):
         ch.pitches = [p.simplifyEnharmonic() for p in ch.pitches]
 
+    # Drop trailing empty measures
     measures = list(new_part.getElementsByClass(stream.Measure))
     for m in reversed(measures):
         if len(m.notesAndRests) == 0 or all(n.isRest for n in m.notesAndRests):
@@ -258,6 +288,7 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
         else:
             break
 
+    # Final score
     new_score = stream.Score()
     new_score.metadata = metadata.Metadata()
     new_score.metadata.title = f"{stem} ({final_inst} Transcription)"
@@ -267,32 +298,37 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
     return new_score
 
 # ----------------------------------------
-# MuseScore: MusicXML -> PDF (FINAL FIXED VERSION)
+# MuseScore: MusicXML -> PDF
 # ----------------------------------------
 def run_musescore_to_pdf(musicxml_path: Path, out_dir: Path) -> Path:
     out_pdf = out_dir / f"{musicxml_path.stem}.pdf"
 
-    result = subprocess.run(
-        [
-            MUSESCORE_CLI,
-            str(musicxml_path),
-            "--style", STYLE_FILE,
-            "-o", str(out_pdf)
-        ],
-        capture_output=True, text=True, timeout=120
+    env = os.environ.copy()
+    env["QT_QPA_PLATFORM"] = "offscreen"
+
+    xvfb = subprocess.Popen(
+        ["Xvfb", ":99", "-screen", "0", "1280x1024x24"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
     )
+    env["DISPLAY"] = ":99"
 
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"MuseScore failed (exit {result.returncode}):\n"
-            f"STDOUT:\n{result.stdout[-1000:]}\n"
-            f"STDERR:\n{result.stderr[-1000:]}"
+    try:
+        time.sleep(1)
+        result = subprocess.run(
+            [MUSESCORE_CLI, str(musicxml_path), "-o", str(out_pdf)],
+            capture_output=True, text=True, timeout=120, env=env
         )
-
-    if not out_pdf.exists():
-        raise FileNotFoundError("MuseScore did not produce a PDF")
-
-    return out_pdf
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"MuseScore failed (exit {result.returncode}):\n"
+                f"STDOUT:\n{result.stdout[-1000:]}\nSTDERR:\n{result.stderr[-1000:]}"
+            )
+        if not out_pdf.exists():
+            raise FileNotFoundError("MuseScore did not produce a PDF")
+        return out_pdf
+    finally:
+        xvfb.terminate()
 
 # ----------------------------------------
 # Convert endpoint
@@ -340,7 +376,3 @@ async def convert_file(
     except (FileNotFoundError, RuntimeError) as e:
         shutil.rmtree(temp_dir, ignore_errors=True)
         return JSONResponse(status_code=500, content={"error": str(e)[:500]})
-
-if __name__ == "__main__":
-    import uvicorn, os
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
