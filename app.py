@@ -219,6 +219,7 @@ TREBLE_INSTRUMENTS = {
 ALTO_INSTRUMENTS = {"Viola"}
 
 #hello
+#goodbye
 
 BASS_INSTRUMENTS = {
     "Cello", "Double Bass", "Bassoon", "Contrabassoon",
