@@ -23,6 +23,9 @@ app.add_middleware(
 )
 
 MUSESCORE_CLI = os.getenv("MUSESCORE_CLI", "/opt/musescore/bin/mscore4portable")
+BASE_DIR = Path(__file__).resolve().parent
+DEFAULT_STYLE_PATH = BASE_DIR / "styles" / "default.mss"
+STYLE_FILE = Path(os.getenv("MUSESCORE_STYLE", str(DEFAULT_STYLE_PATH)))
 
 # ----------------------------------------
 # Health + Root
@@ -42,7 +45,9 @@ def health():
 def debug():
     results = {}
     results["mscore_exists"] = Path(MUSESCORE_CLI).exists()
-    r = subprocess.run([MUSESCORE_CLI, "--version"], capture_output=True, text=True)
+    env = os.environ.copy()
+    env["QT_QPA_PLATFORM"] = "offscreen"
+    r = subprocess.run([MUSESCORE_CLI, "--version"], capture_output=True, text=True, env=env)
     results["mscore_version"] = r.stdout.strip() or r.stderr.strip()
     return results
 
@@ -303,6 +308,28 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
 # ----------------------------------------
 # MuseScore: MusicXML -> PDF
 # ----------------------------------------
+def get_musescore_style_args(style_path: Path | None) -> list[str]:
+    if not style_path or not style_path.exists():
+        return []
+
+    env = os.environ.copy()
+    env["QT_QPA_PLATFORM"] = "offscreen"
+    help_result = subprocess.run(
+        [MUSESCORE_CLI, "--help"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=env,
+    )
+    help_text = f"{help_result.stdout}\n{help_result.stderr}".lower()
+
+    if "--style" in help_text:
+        return ["--style", str(style_path)]
+    if "-s" in help_text:
+        return ["-s", str(style_path)]
+    return []
+
+
 def run_musescore_to_pdf(musicxml_path: Path, out_dir: Path) -> Path:
     out_pdf = out_dir / f"{musicxml_path.stem}.pdf"
 
@@ -318,9 +345,14 @@ def run_musescore_to_pdf(musicxml_path: Path, out_dir: Path) -> Path:
 
     try:
         time.sleep(1)
+        style_args = get_musescore_style_args(STYLE_FILE)
+        cmd = [MUSESCORE_CLI, *style_args, str(musicxml_path), "-o", str(out_pdf)]
         result = subprocess.run(
-            [MUSESCORE_CLI, str(musicxml_path), "-o", str(out_pdf)],
-            capture_output=True, text=True, timeout=120, env=env
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=env
         )
         if result.returncode != 0:
             raise RuntimeError(
