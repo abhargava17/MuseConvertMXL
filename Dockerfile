@@ -6,6 +6,7 @@ ENV PYTHONUNBUFFERED=1
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget curl ca-certificates unzip \
     xvfb xauth \
+    default-jre \
     python3 python3-pip \
     libglib2.0-0 libpng16-16 \
     libsm6 libxrender1 libxext6 libx11-6 \
@@ -40,7 +41,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ----------------------------------------
-# MuseScore 4.4.4 via AppImage
+# Audiveris (OMR)
+# ----------------------------------------
+RUN wget -q \
+    "https://github.com/Audiveris/audiveris/releases/download/5.3.1/audiveris-5.3.1.zip" \
+    -O /tmp/audiveris.zip \
+    && unzip /tmp/audiveris.zip -d /opt \
+    && rm /tmp/audiveris.zip
+
+ENV AUDIVERIS_CLI=/opt/audiveris-5.3.1/bin/audiveris.sh
+
+# ----------------------------------------
+# MuseScore 4.4.4 (AppImage)
 # ----------------------------------------
 RUN wget -q \
     "https://github.com/musescore/MuseScore/releases/download/v4.4.4/MuseScore-Studio-4.4.4.243461245-x86_64.AppImage" \
@@ -54,13 +66,15 @@ RUN wget -q \
 ENV MUSESCORE_CLI=/opt/musescore/bin/mscore4portable
 
 # ----------------------------------------
-# App
+# Python App
 # ----------------------------------------
 WORKDIR /app
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
+
 COPY app.py .
 COPY styles ./styles
+
 RUN mkdir -p /app/data
 
 EXPOSE 10000
