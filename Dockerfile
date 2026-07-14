@@ -41,10 +41,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ----------------------------------------
-# Audiveris (OMR) — TAR.GZ (Railway‑safe)
+# Audiveris (OMR) — Railway-safe mirror
 # ----------------------------------------
 RUN wget -q \
-    "https://github.com/Audiveris/audiveris/releases/download/5.3.1/audiveris-5.3.1.tar.gz" \
+    "https://audiveris-mirror.s3.amazonaws.com/audiveris-5.3.1.tar.gz" \
     -O /tmp/audiveris.tar.gz \
     && tar -xzf /tmp/audiveris.tar.gz -C /opt \
     && rm /tmp/audiveris.tar.gz
