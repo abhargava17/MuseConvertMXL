@@ -1,4 +1,3 @@
 fastapi
-uvicorn[standard]
+uvicorn
 music21
-python-multipart
