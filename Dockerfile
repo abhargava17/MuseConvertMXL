@@ -41,13 +41,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ----------------------------------------
-# Audiveris (OMR)
+# Audiveris (OMR) — TAR.GZ (Railway‑safe)
 # ----------------------------------------
 RUN wget -q \
-    "https://github.com/Audiveris/audiveris/releases/download/5.3.1/audiveris-5.3.1.zip" \
-    -O /tmp/audiveris.zip \
-    && unzip /tmp/audiveris.zip -d /opt \
-    && rm /tmp/audiveris.zip
+    "https://github.com/Audiveris/audiveris/releases/download/5.3.1/audiveris-5.3.1.tar.gz" \
+    -O /tmp/audiveris.tar.gz \
+    && tar -xzf /tmp/audiveris.tar.gz -C /opt \
+    && rm /tmp/audiveris.tar.gz
 
 ENV AUDIVERIS_CLI=/opt/audiveris-5.3.1/bin/audiveris.sh
 
