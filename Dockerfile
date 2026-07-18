@@ -41,15 +41,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ----------------------------------------
-# Audiveris (OMR) — Railway-safe mirror
+# Audiveris (your local build)
 # ----------------------------------------
-RUN wget -q \
-    "https://audiveris-mirror.s3.amazonaws.com/audiveris-5.3.1.tar.gz" \
-    -O /tmp/audiveris.tar.gz \
-    && tar -xzf /tmp/audiveris.tar.gz -C /opt \
-    && rm /tmp/audiveris.tar.gz
-
-ENV AUDIVERIS_CLI=/opt/audiveris-5.3.1/bin/audiveris.sh
+COPY audiveris/app-5.11.0 /opt/audiveris
+RUN chmod +x /opt/audiveris/bin/audiveris.sh
+ENV AUDIVERIS_CLI=/opt/audiveris/bin/audiveris.sh
 
 # ----------------------------------------
 # MuseScore 4.4.4 (AppImage)
