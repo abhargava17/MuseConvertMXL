@@ -61,7 +61,8 @@ ENV PATH="$JAVA_HOME/bin:$PATH"
 
 ENV LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu
 ENV JAVA_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu
-ENV JAVA_TOOL_OPTIONS="--enable-native-access=ALL-UNNAMED -Djava.library.path=/usr/lib/x8
+ENV JAVA_TOOL_OPTIONS=--enable-native-access=ALL-UNNAMED
+ENV JAVA_OPTS=-Djava.library.path=/usr/lib/x86_64-linux-gnu
 
 # ---------------------------------------------------------
 # Audiveris build
