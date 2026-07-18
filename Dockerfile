@@ -59,6 +59,10 @@ RUN wget -q https://download.oracle.com/java/26/latest/jdk-26_linux-x64_bin.tar.
 ENV JAVA_HOME=/opt/jdk
 ENV PATH="$JAVA_HOME/bin:$PATH"
 
+# Native access + library path fixes
+ENV LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+ENV JAVA_TOOL_OPTIONS="--enable-native-access=ALL-UNNAMED"
+
 # ---------------------------------------------------------
 # Audiveris build
 # ---------------------------------------------------------
