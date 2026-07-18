@@ -3,10 +3,12 @@ FROM debian:12-slim
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 
+# ---------------------------------------------------------
+# Install system dependencies
+# ---------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget curl ca-certificates unzip \
     xvfb xauth \
-    default-jre \
     python3 python3-pip \
     libglib2.0-0 libpng16-16 \
     libsm6 libxrender1 libxext6 libx11-6 \
@@ -40,16 +42,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libopengl0 \
     && rm -rf /var/lib/apt/lists/*
 
-# ----------------------------------------
+# ---------------------------------------------------------
+# Install Java 25 (required for your Audiveris build)
+# ---------------------------------------------------------
+RUN wget -q https://download.java.net/java/GA/jdk25/latest/binaries/openjdk-25_linux-x64_bin.tar.gz -O /tmp/jdk.tar.gz \
+    && mkdir -p /opt/jdk \
+    && tar -xzf /tmp/jdk.tar.gz -C /opt/jdk --strip-components=1 \
+    && rm /tmp/jdk.tar.gz
+
+ENV JAVA_HOME=/opt/jdk
+ENV PATH="$JAVA_HOME/bin:$PATH"
+
+# ---------------------------------------------------------
 # Audiveris (your local build)
-# ----------------------------------------
+# ---------------------------------------------------------
 COPY audiveris/app-5.11.0 /opt/audiveris
+
+# Make sure your wrapper script is executable
 RUN chmod +x /opt/audiveris/bin/audiveris.sh
+
 ENV AUDIVERIS_CLI=/opt/audiveris/bin/audiveris.sh
 
-# ----------------------------------------
+# ---------------------------------------------------------
 # MuseScore 4.4.4 (AppImage)
-# ----------------------------------------
+# ---------------------------------------------------------
 RUN wget -q \
     "https://github.com/musescore/MuseScore/releases/download/v4.4.4/MuseScore-Studio-4.4.4.243461245-x86_64.AppImage" \
     -O /tmp/musescore.AppImage \
@@ -61,10 +77,11 @@ RUN wget -q \
 
 ENV MUSESCORE_CLI=/opt/musescore/bin/mscore4portable
 
-# ----------------------------------------
+# ---------------------------------------------------------
 # Python App
-# ----------------------------------------
+# ---------------------------------------------------------
 WORKDIR /app
+
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
@@ -74,4 +91,5 @@ COPY styles ./styles
 RUN mkdir -p /app/data
 
 EXPOSE 10000
+
 CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port 10000"]
