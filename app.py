@@ -14,16 +14,13 @@ app = FastAPI(title="MuseConvert PDF Instrument Converter")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://project-rilup.vercel.app",
-        "http://localhost:3000"
-    ],
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 MUSESCORE_CLI = os.getenv("MUSESCORE_CLI", "/opt/musescore/bin/mscore4portable")
-AUDIVERIS_CLI = os.getenv("AUDIVERIS_CLI", "/opt/audiveris-5.3.1/bin/audiveris.sh")
+AUDIVERIS_CLI = os.getenv("AUDIVERIS_CLI", "/opt/audiveris/bin/audiveris.sh")
 
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_STYLE_PATH = BASE_DIR / "styles" / "default.mss"
