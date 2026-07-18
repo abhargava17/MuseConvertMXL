@@ -12,10 +12,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip \
     libgtk-3-0 \
     libgdk-pixbuf2.0-0 \
-    tesseract-ocr \
-    libleptonica-dev \
-    libtesseract5 \
-    liblept5 \
     libglib2.0-0 libpng16-16 \
     libsm6 libxrender1 libxext6 libx11-6 \
     libxcb1 libglu1-mesa libdbus-1-3 \
@@ -59,10 +55,20 @@ RUN wget -q https://download.oracle.com/java/26/latest/jdk-26_linux-x64_bin.tar.
 ENV JAVA_HOME=/opt/jdk
 ENV PATH="$JAVA_HOME/bin:$PATH"
 
-ENV LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu
-ENV JAVA_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu
+# ---------------------------------------------------------
+# Install Bytedeco-native Tesseract + Leptonica
+# ---------------------------------------------------------
+RUN wget -q https://repo1.maven.org/maven2/org/bytedeco/tesseract/5.5.2-1.5.13/tesseract-5.5.2-1.5.13-linux-x86_64.jar -O /tmp/tess.jar \
+    && wget -q https://repo1.maven.org/maven2/org/bytedeco/leptonica/1.87.0-1.5.13/leptonica-1.87.0-1.5.13-linux-x86_64.jar -O /tmp/lep.jar \
+    && mkdir -p /usr/lib/jni \
+    && cd /usr/lib/jni \
+    && jar xf /tmp/tess.jar \
+    && jar xf /tmp/lep.jar \
+    && rm /tmp/tess.jar /tmp/lep.jar
+
+ENV LD_LIBRARY_PATH=/usr/lib/jni
 ENV JAVA_TOOL_OPTIONS=--enable-native-access=ALL-UNNAMED
-ENV JAVA_OPTS=-Djava.library.path=/usr/lib/x86_64-linux-gnu
+ENV JAVA_OPTS=-Djava.library.path=/usr/lib/jni
 
 # ---------------------------------------------------------
 # Audiveris build
