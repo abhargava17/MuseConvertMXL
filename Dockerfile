@@ -43,9 +43,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ---------------------------------------------------------
-# Install Java 25 (required for your Audiveris build)
+# Install Java 26
 # ---------------------------------------------------------
-RUN wget -q https://download.java.net/java/GA/jdk25/latest/binaries/openjdk-25_linux-x64_bin.tar.gz -O /tmp/jdk.tar.gz \
+RUN wget -q https://download.oracle.com/java/26/latest/jdk-26_linux-x64_bin.tar.gz -O /tmp/jdk.tar.gz \
     && mkdir -p /opt/jdk \
     && tar -xzf /tmp/jdk.tar.gz -C /opt/jdk --strip-components=1 \
     && rm /tmp/jdk.tar.gz
@@ -54,13 +54,10 @@ ENV JAVA_HOME=/opt/jdk
 ENV PATH="$JAVA_HOME/bin:$PATH"
 
 # ---------------------------------------------------------
-# Audiveris (your local build)
+# Audiveris build
 # ---------------------------------------------------------
 COPY audiveris/app-5.11.0 /opt/audiveris
-
-# Make sure your wrapper script is executable
 RUN chmod +x /opt/audiveris/bin/audiveris.sh
-
 ENV AUDIVERIS_CLI=/opt/audiveris/bin/audiveris.sh
 
 # ---------------------------------------------------------
@@ -78,7 +75,7 @@ RUN wget -q \
 ENV MUSESCORE_CLI=/opt/musescore/bin/mscore4portable
 
 # ---------------------------------------------------------
-# Python App
+# Python application
 # ---------------------------------------------------------
 WORKDIR /app
 
