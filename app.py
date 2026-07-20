@@ -331,21 +331,19 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
     # 5. Extract original written key signature
     # ----------------------------------------
     orig_key_sig = original_part.recurse().getElementsByClass(key.KeySignature).first()
-    
+
     if orig_key_sig:
-        # asKey() already returns a Key object
-        orig_key_obj = orig_key_sig.asKey()
+        # Work directly with the KeySignature
+        orig_key_sig_transposed = key.KeySignature(orig_key_sig.sharps)
+        orig_key_sig_transposed = orig_key_sig_transposed.transpose(transp_intvl)
     
-        # transpose the key
-        new_key_obj = orig_key_obj.transpose(transp_intvl)
+        # Try cleaner enharmonic spelling (KeySignature supports this)
+        alt = orig_key_sig_transposed.getEnharmonic()
+        if abs(alt.sharps) < abs(orig_key_sig_transposed.sharps):
+            orig_key_sig_transposed = alt
     
-        # choose cleaner enharmonic (Eb→Bb instead of C#)
-        alt = new_key_obj.getEnharmonic()
-        if abs(alt.sharps) < abs(new_key_obj.sharps):
-            new_key_obj = alt
-    
-        # insert corrected key signature
-        new_part.insert(0.1, key.KeySignature(new_key_obj.sharps))
+        # Insert corrected key signature
+        new_part.insert(0.1, orig_key_sig_transposed)
 
 
     # ----------------------------------------
