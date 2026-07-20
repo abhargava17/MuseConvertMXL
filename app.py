@@ -302,7 +302,7 @@ def get_clef(instrument_name: str):
         return clef.TrebleClef()
         
 def process_score(input_path: Path, original_inst: str, final_inst: str, stem: str) -> stream.Score:
-    # 1. Compute transposition interval
+    # 1. Compute transposition interval (your fingering model)
     i1, i2 = get_transpose_intervals(original_inst, final_inst)
     semitones_total = i1.semitones + i2.semitones
     transp_intvl = interval.Interval(semitones_total)
@@ -311,34 +311,15 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
     score = converter.parse(str(input_path))
     original_part = score.parts[0]
 
-    # 3. Transpose the part
+    # 3. Transpose the part (fingering equivalence)
     transposed = original_part.transpose(transp_intvl)
 
     # 4. Build new part
     new_part = stream.Part()
     new_part.partName = final_inst
 
-    # 5. Key handling using music21's native transposition
-    orig_key = score.analyze('key')
-    new_key_obj = orig_key.transpose(transp_intvl)
-
-    # Preserve accidental family WITHOUT getEnharmonic()
-    # If original was flat-based, keep flats when possible
-    if orig_key.sharps < 0 and new_key_obj.sharps > 0:
-        # Force into flat world by subtracting 12 sharps (circle of fifths)
-        new_sharps = new_key_obj.sharps - 12
-    # If original was sharp-based, keep sharps when possible
-    elif orig_key.sharps > 0 and new_key_obj.sharps < 0:
-        # Force into sharp world by adding 12 sharps
-        new_sharps = new_key_obj.sharps + 12
-    else:
-        new_sharps = new_key_obj.sharps
-
-    # Clamp extreme keys
-    if new_sharps > 6:
-        new_sharps -= 12
-    if new_sharps < -6:
-        new_sharps += 12
+    # 5. Determine the correct MUSICAL key AFTER fingering transposition
+    sounding_key = transposed.analyze('key')
 
     # 6. Clef, time signature, tempo
     target_clef = get_clef(final_inst)
@@ -356,12 +337,12 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
             if target_clef:
                 measure.insert(0, target_clef)
 
-            # Do NOT re‑insert time_sig (already present)
+            # Do NOT re‑insert time signature (already present)
             if tempo_mark:
                 measure.insert(0, tempo_mark)
 
-            # Insert key signature inside measure 1
-            measure.insert(0, key.KeySignature(new_sharps))
+            # Insert correct MUSICAL key signature
+            measure.insert(0, key.KeySignature(sounding_key.sharps))
 
         new_part.append(measure)
 
@@ -380,10 +361,9 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
     new_score.metadata.composer = "Arranged by MuseConvert"
     new_score.insert(0, new_part)
 
-    # 10. Leave accidentals exactly as music21 spells them
+    # 10. Leave accidentals as music21 spells them under the new key
     return new_score
 
-    
 # ----------------------------------------
 # MuseScore: MusicXML → PDF (your existing logic)
 # ----------------------------------------
