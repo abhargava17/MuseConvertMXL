@@ -302,6 +302,9 @@ def get_clef(instrument_name: str):
         return clef.TrebleClef()
 
 
+from pathlib import Path
+from music21 import stream, interval, converter, meter, tempo, clef, metadata, key
+
 def process_score(input_path: Path, original_inst: str, final_inst: str, stem: str) -> stream.Score:
     # ----------------------------------------
     # 1. Compute transposition interval
@@ -342,12 +345,9 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
 
         # RULE 2: If original was flat-based, force flat-based spelling
         if orig_was_flat and new_sharps > 0:
-            new_sharps -= 12  # convert C# major → Db major, etc.
+            new_sharps -= 12
 
-        # RULE 3: If original was sharp-based, allow sharp keys (including C# major)
-        # No change needed
-
-        # RULE 4: Avoid extreme keys (more than 6 sharps or flats)
+        # RULE 3: Avoid extreme keys
         if new_sharps > 6:
             new_sharps -= 12
         if new_sharps < -6:
@@ -372,7 +372,7 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
         if i == 0:
             if target_clef:
                 measure.insert(0, target_clef)
-            # DO NOT re‑insert time_sig here; it’s already in the measure
+            # DO NOT insert time_sig again — it already exists
             if tempo_mark:
                 measure.insert(0, tempo_mark)
 
@@ -400,7 +400,7 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
     # ----------------------------------------
     # 10. Clean accidental spelling (based on key)
     # ----------------------------------------
-    new_score.rewriteAccidentals(inPlace=True)
+    new_part.rewriteAccidentals(inPlace=True)
 
     return new_score
     
