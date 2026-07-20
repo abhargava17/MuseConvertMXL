@@ -333,17 +333,27 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
     orig_key_sig = original_part.recurse().getElementsByClass(key.KeySignature).first()
 
     if orig_key_sig:
-        # Work directly with the KeySignature
-        orig_key_sig_transposed = key.KeySignature(orig_key_sig.sharps)
-        orig_key_sig_transposed = orig_key_sig_transposed.transpose(transp_intvl)
+        # Transpose sharps count by circle-of-fifths logic
+        new_sharps = orig_key_sig.sharps + (transp_intvl.semitones // 2)
     
-        # Try cleaner enharmonic spelling (KeySignature supports this)
-        alt = orig_key_sig_transposed.getEnharmonic()
-        if abs(alt.sharps) < abs(orig_key_sig_transposed.sharps):
-            orig_key_sig_transposed = alt
+        # RULE 1: Preserve accidental family
+        orig_was_flat = orig_key_sig.sharps < 0
+        orig_was_sharp = orig_key_sig.sharps > 0
     
-        # Insert corrected key signature
-        new_part.insert(0.1, orig_key_sig_transposed)
+        # RULE 2: If original was flat-based, force flat-based spelling
+        if orig_was_flat and new_sharps > 0:
+            new_sharps -= 12  # convert C# major → Db major, etc.
+    
+        # RULE 3: If original was sharp-based, allow sharp keys (including C# major)
+        # No change needed
+    
+        # RULE 4: Avoid extreme keys (more than 6 sharps or flats)
+        if new_sharps > 6:
+            new_sharps -= 12
+        if new_sharps < -6:
+            new_sharps += 12
+    
+        new_part.insert(0.1, key.KeySignature(new_sharps))
 
 
     # ----------------------------------------
