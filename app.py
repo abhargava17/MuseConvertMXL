@@ -311,6 +311,11 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
     score = converter.parse(str(input_path))
     original_part = score.parts[0]
 
+    # --- DEBUG: See what key signatures actually exist in the piece ---
+    print("Key signatures found:")
+    for ks in original_part.recurse().getElementsByClass(key.KeySignature):
+        print("  sharps:", ks.sharps)
+    
     # 3. Transpose the part (fingering equivalence)
     transposed = original_part.transpose(transp_intvl)
 
