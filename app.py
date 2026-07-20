@@ -301,82 +301,67 @@ def get_clef(instrument_name: str):
     else:
         return clef.TrebleClef()
 
+from pathlib import Path
+from music21 import stream, interval, converter, meter, tempo, clef, metadata, key
+
 def process_score(input_path: Path, original_inst: str, final_inst: str, stem: str) -> stream.Score:
-    # ----------------------------------------
     # 1. Compute transposition interval
-    # ----------------------------------------
     i1, i2 = get_transpose_intervals(original_inst, final_inst)
     semitones_total = i1.semitones + i2.semitones
     transp_intvl = interval.Interval(semitones_total)
 
-    # ----------------------------------------
     # 2. Parse original score
-    # ----------------------------------------
     score = converter.parse(str(input_path))
     original_part = score.parts[0]
 
-    # ----------------------------------------
     # 3. Transpose the part
-    # ----------------------------------------
     transposed = original_part.transpose(transp_intvl)
 
-    # ----------------------------------------
     # 4. Build new part
-    # ----------------------------------------
     new_part = stream.Part()
     new_part.partName = final_inst
 
-    # ----------------------------------------
-    # 5. Extract original written key signature
-    # ----------------------------------------
-    orig_key_sig = original_part.recurse().getElementsByClass(key.KeySignature).first()
+    # 5. Robust key handling using music21's native transposition
+    orig_key = score.analyze('key')
+    new_key_obj = orig_key.transpose(transp_intvl)
 
-    if orig_key_sig:
-        # Transpose sharps count by circle-of-fifths logic
-        new_sharps = orig_key_sig.sharps + (transp_intvl.semitones // 2)
+    # Preserve spelling family when possible (flat→flat, sharp→sharp)
+    if orig_key.sharps < 0 and new_key_obj.sharps > 0:
+        alt = new_key_obj.getEnharmonic()
+        if abs(alt.sharps) < abs(new_key_obj.sharps):
+            new_key_obj = alt
+    elif orig_key.sharps > 0 and new_key_obj.sharps < 0:
+        alt = new_key_obj.getEnharmonic()
+        if abs(alt.sharps) < abs(new_key_obj.sharps):
+            new_key_obj = alt
 
-        # RULE 1: Preserve accidental family
-        orig_was_flat = orig_key_sig.sharps < 0
-        orig_was_sharp = orig_key_sig.sharps > 0
-
-        # RULE 2: If original was flat-based, force flat-based spelling
-        if orig_was_flat and new_sharps > 0:
-            new_sharps -= 12
-
-        # RULE 3: Avoid extreme keys
-        if new_sharps > 6:
-            new_sharps -= 12
-        if new_sharps < -6:
-            new_sharps += 12
-
-        new_part.insert(0.1, key.KeySignature(new_sharps))
-
-    # ----------------------------------------
     # 6. Clef, time signature, tempo
-    # ----------------------------------------
     target_clef = get_clef(final_inst)
     time_sig = transposed.recurse().getElementsByClass(meter.TimeSignature).first()
     tempo_mark = transposed.recurse().getElementsByClass(tempo.MetronomeMark).first()
 
-    # ----------------------------------------
     # 7. Insert measures and clean mid‑measure clefs
-    # ----------------------------------------
     for i, measure in enumerate(transposed.getElementsByClass(stream.Measure)):
+        # Remove old clefs
         for c in measure.recurse().getElementsByClass(clef.Clef):
             measure.remove(c)
 
         if i == 0:
+            # Put everything INSIDE measure 1
             if target_clef:
                 measure.insert(0, target_clef)
-            # DO NOT insert time_sig again — it already exists
+
+            # Do NOT re‑insert time_sig if it's already in the measure
+            # (transposed measure already carries it)
             if tempo_mark:
                 measure.insert(0, tempo_mark)
 
+            # Insert key signature inside measure 1 (no floating KS on part)
+            measure.insert(0, key.KeySignature(new_key_obj.sharps))
+
         new_part.append(measure)
 
-    # ----------------------------------------
     # 8. Remove trailing empty measures
-    # ----------------------------------------
     measures = list(new_part.getElementsByClass(stream.Measure))
     for m in reversed(measures):
         if len(m.notesAndRests) == 0 or all(n.isRest for n in m.notesAndRests):
@@ -384,21 +369,14 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
         else:
             break
 
-    # ----------------------------------------
     # 9. Build final score
-    # ----------------------------------------
     new_score = stream.Score()
     new_score.metadata = metadata.Metadata()
     new_score.metadata.title = f"{stem} ({final_inst} Transcription)"
     new_score.metadata.composer = "Arranged by MuseConvert"
     new_score.insert(0, new_part)
 
-    # ----------------------------------------
-    # 10. Clean accidental spelling (based on key)
-    # ----------------------------------------
-    # ⭐ FIX: Call it on new_score, not new_part
-    new_score.rewriteAccidentals(inPlace=True)
-
+    # 10. Leave accidentals as music21 spells them under the new key
     return new_score
     
 # ----------------------------------------
