@@ -10,6 +10,13 @@ import time
 
 from music21 import converter, stream, clef, metadata, chord, key, interval, meter, tempo
 
+# Simple in-memory log buffer for live debugging
+LIVE_LOGS = []
+
+def live_log(msg: str):
+    LIVE_LOGS.append(msg)
+    print(msg)
+
 app = FastAPI(title="MuseConvert PDF Instrument Converter")
 
 app.add_middleware(
@@ -71,16 +78,10 @@ def debug():
 
 
 @app.post("/debug-process")
-async def debug_process(
-    file: UploadFile = File(...),
-    original_instrument: str = Form(...),
-    final_instrument: str = Form(...),
-):
-    """
-    Full debug pipeline:
-    PDF → MusicXML → transposed MusicXML → PDF.
-    Returns metadata about each stage.
-    """
+async def debug_process(file: UploadFile = File(...), original_instrument: str = Form(...), final_instrument: str = Form(...)):
+    LIVE_LOGS.clear()
+    live_log("🚀 Starting debug pipeline")
+
     temp_dir = Path(tempfile.mkdtemp(prefix="museconvert_debug_"))
 
     try:
@@ -388,6 +389,7 @@ def run_musescore_to_pdf(musicxml_path: Path, out_dir: Path) -> Path:
     env = os.environ.copy()
     env["QT_QPA_PLATFORM"] = "offscreen"
 
+    # Start virtual display
     xvfb = subprocess.Popen(
         ["Xvfb", ":99", "-screen", "0", "1280x1024x24"],
         stdout=subprocess.DEVNULL,
@@ -396,24 +398,48 @@ def run_musescore_to_pdf(musicxml_path: Path, out_dir: Path) -> Path:
     env["DISPLAY"] = ":99"
 
     try:
-        time.sleep(1)
+        time.sleep(1)  # allow Xvfb to initialize
+
         style_args = get_musescore_style_args(STYLE_FILE)
         cmd = [MUSESCORE_CLI, *style_args, str(musicxml_path), "-o", str(out_pdf)]
-        result = subprocess.run(
+
+        live_log("▶ MuseScore engraving (MusicXML → PDF)")
+        live_log(f"$ {' '.join(cmd)}")
+
+        process = subprocess.Popen(
             cmd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
-            timeout=120,
             env=env
         )
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"MuseScore failed (exit {result.returncode}):\n"
-                f"STDOUT:\n{result.stdout[-1000:]}\nSTDERR:\n{result.stderr[-1000:]}"
-            )
+
+        start_time = time.time()
+        TIMEOUT = 120  # 2 minutes (adjust if needed)
+
+        # Stream logs line-by-line
+        for line in process.stdout:
+            live_log(line.rstrip())
+
+            # Manual timeout check
+            if time.time() - start_time > TIMEOUT:
+                process.kill()
+                live_log("❌ MuseScore timed out after 120 seconds")
+                raise TimeoutError("MuseScore timed out after 120 seconds")
+
+        process.wait()
+
+        if process.returncode != 0:
+            live_log(f"❌ MuseScore failed with code {process.returncode}")
+            raise RuntimeError(f"MuseScore failed (exit {process.returncode})")
+
+        live_log("✔ MuseScore engraving completed")
+
         if not out_pdf.exists():
             raise FileNotFoundError("MuseScore did not produce a PDF")
+
         return out_pdf
+
     finally:
         xvfb.terminate()
 
@@ -422,30 +448,56 @@ def run_musescore_to_pdf(musicxml_path: Path, out_dir: Path) -> Path:
 # Audiveris: PDF → MusicXML (new)
 # ----------------------------------------
 def run_audiveris_on_pdf(pdf_path: Path, out_dir: Path) -> Path:
-    result = subprocess.run(
-        [
-            AUDIVERIS_CLI,
-            "-batch",
-            "-export",
-            "-output", str(out_dir),
-            str(pdf_path),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=300,
+    cmd = [
+        AUDIVERIS_CLI,
+        "-batch",
+        "-export",
+        "-output", str(out_dir),
+        str(pdf_path),
+    ]
+
+    # Use Popen for streaming logs
+    live_log("▶ Audiveris OMR (PDF → MusicXML)")
+    live_log(f"$ {' '.join(cmd)}")
+
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True
     )
 
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"Audiveris failed (exit {result.returncode}):\n"
-            f"STDOUT:\n{result.stdout[-1000:]}\nSTDERR:\n{result.stderr[-1000:]}"
-        )
+    start_time = time.time()
+    TIMEOUT = 900  # 15 minutes
 
+    # Stream logs line-by-line
+    for line in process.stdout:
+        live_log(line.rstrip())
+
+        # Manual timeout check
+        if time.time() - start_time > TIMEOUT:
+            process.kill()
+            live_log("❌ Audiveris timed out after 900 seconds")
+            raise TimeoutError("Audiveris timed out after 900 seconds")
+
+    process.wait()
+
+    if process.returncode != 0:
+        live_log(f"❌ Audiveris failed with code {process.returncode}")
+        raise RuntimeError(f"Audiveris failed (exit {process.returncode})")
+
+    live_log("✔ Audiveris OMR completed")
+
+    # Find MusicXML output
     candidates = list(out_dir.glob("*.xml")) + list(out_dir.glob("*.mxl"))
     if not candidates:
         raise FileNotFoundError("Audiveris did not produce any MusicXML file")
 
     return candidates[0]
+
+@app.get("/debug-logs")
+def debug_logs():
+    return {"logs": LIVE_LOGS[-200:]}  # last 200 lines
 
 @app.post("/convert-pdf")
 async def convert_pdf(
