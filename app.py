@@ -321,8 +321,7 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
 
     orig_key = score.analyze('key')
     new_key_obj = orig_key.transpose(transp_intvl)
-    new_key_sig = key.KeySignature(new_key_obj.sharps)
-    new_part.insert(0.1, new_key_sig)
+    new_part.insert(0.1, new_key_obj)
 
     time_sig = transposed.recurse().getElementsByClass(meter.TimeSignature).first()
     if time_sig:
