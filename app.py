@@ -301,10 +301,6 @@ def get_clef(instrument_name: str):
     else:
         return clef.TrebleClef()
 
-
-from pathlib import Path
-from music21 import stream, interval, converter, meter, tempo, clef, metadata, key
-
 def process_score(input_path: Path, original_inst: str, final_inst: str, stem: str) -> stream.Score:
     # ----------------------------------------
     # 1. Compute transposition interval
@@ -400,7 +396,8 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
     # ----------------------------------------
     # 10. Clean accidental spelling (based on key)
     # ----------------------------------------
-    new_part.rewriteAccidentals(inPlace=True)
+    # ⭐ FIX: Call it on new_score, not new_part
+    new_score.rewriteAccidentals(inPlace=True)
 
     return new_score
     
