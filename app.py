@@ -335,26 +335,25 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
     if orig_key_sig:
         # Transpose sharps count by circle-of-fifths logic
         new_sharps = orig_key_sig.sharps + (transp_intvl.semitones // 2)
-    
+
         # RULE 1: Preserve accidental family
         orig_was_flat = orig_key_sig.sharps < 0
         orig_was_sharp = orig_key_sig.sharps > 0
-    
+
         # RULE 2: If original was flat-based, force flat-based spelling
         if orig_was_flat and new_sharps > 0:
             new_sharps -= 12  # convert C# major → Db major, etc.
-    
+
         # RULE 3: If original was sharp-based, allow sharp keys (including C# major)
         # No change needed
-    
+
         # RULE 4: Avoid extreme keys (more than 6 sharps or flats)
         if new_sharps > 6:
             new_sharps -= 12
         if new_sharps < -6:
             new_sharps += 12
-    
-        new_part.insert(0.1, key.KeySignature(new_sharps))
 
+        new_part.insert(0.1, key.KeySignature(new_sharps))
 
     # ----------------------------------------
     # 6. Clef, time signature, tempo
@@ -371,9 +370,11 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
             measure.remove(c)
 
         if i == 0:
-            if target_clef: measure.insert(0, target_clef)
-            if time_sig:    measure.insert(0, time_sig)
-            if tempo_mark:  measure.insert(0, tempo_mark)
+            if target_clef:
+                measure.insert(0, target_clef)
+            # DO NOT re‑insert time_sig here; it’s already in the measure
+            if tempo_mark:
+                measure.insert(0, tempo_mark)
 
         new_part.append(measure)
 
