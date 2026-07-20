@@ -56,26 +56,21 @@ ENV JAVA_HOME=/opt/jdk
 ENV PATH="$JAVA_HOME/bin:$PATH"
 
 # ---------------------------------------------------------
-# Install Bytedeco-native Tesseract + Leptonica
-# ---------------------------------------------------------
-RUN wget -q https://repo1.maven.org/maven2/org/bytedeco/tesseract/5.5.2-1.5.13/tesseract-5.5.2-1.5.13-linux-x86_64.jar -O /tmp/tess.jar \
-    && wget -q https://repo1.maven.org/maven2/org/bytedeco/leptonica/1.87.0-1.5.13/leptonica-1.87.0-1.5.13-linux-x86_64.jar -O /tmp/lep.jar \
-    && mkdir -p /usr/lib/jni \
-    && cd /usr/lib/jni \
-    && jar xf /tmp/tess.jar \
-    && jar xf /tmp/lep.jar \
-    && rm /tmp/tess.jar /tmp/lep.jar
-
-ENV LD_LIBRARY_PATH=/usr/lib/jni
-ENV JAVA_TOOL_OPTIONS=--enable-native-access=ALL-UNNAMED
-ENV JAVA_OPTS=-Djava.library.path=/usr/lib/jni
-
-# ---------------------------------------------------------
-# Audiveris build
+# Audiveris setup
 # ---------------------------------------------------------
 COPY audiveris/app-5.11.0 /opt/audiveris
 RUN chmod +x /opt/audiveris/bin/audiveris.sh
 ENV AUDIVERIS_CLI=/opt/audiveris/bin/audiveris.sh
+
+# ---------------------------------------------------------
+# Fix Bytedeco Tesseract / Leptonica for Linux
+# ---------------------------------------------------------
+RUN wget -q https://repo1.maven.org/maven2/org/bytedeco/tesseract/5.5.2-1.5.13/tesseract-5.5.2-1.5.13-linux-x86_64.jar -O /opt/audiveris/lib/tesseract-5.5.2-1.5.13-linux-x86_64.jar \
+    && wget -q https://repo1.maven.org/maven2/org/bytedeco/leptonica/1.87.0-1.5.13/leptonica-1.87.0-1.5.13-linux-x86_64.jar -O /opt/audiveris/lib/leptonica-1.87.0-1.5.13-linux-x86_64.jar \
+    && rm -f /opt/audiveris/lib/*-windows-x86_64.jar
+
+# Required for Java 26 native access 
+ENV JAVA_TOOL_OPTIONS=--enable-native-access=ALL-UNNAMED
 
 # ---------------------------------------------------------
 # MuseScore 4.4.4 (AppImage)
