@@ -302,45 +302,75 @@ def get_clef(instrument_name: str):
         return clef.TrebleClef()
 
 
-# ----------------------------------------
-# Core processing (your existing MusicXML → transposed MusicXML)
-# ----------------------------------------
 def process_score(input_path: Path, original_inst: str, final_inst: str, stem: str) -> stream.Score:
+    # ----------------------------------------
+    # 1. Compute transposition interval
+    # ----------------------------------------
     i1, i2 = get_transpose_intervals(original_inst, final_inst)
     semitones_total = i1.semitones + i2.semitones
     transp_intvl = interval.Interval(semitones_total)
 
+    # ----------------------------------------
+    # 2. Parse original score
+    # ----------------------------------------
     score = converter.parse(str(input_path))
     original_part = score.parts[0]
+
+    # ----------------------------------------
+    # 3. Transpose the part
+    # ----------------------------------------
     transposed = original_part.transpose(transp_intvl)
 
+    # ----------------------------------------
+    # 4. Build new part
+    # ----------------------------------------
     new_part = stream.Part()
     new_part.partName = final_inst
 
-    new_part.insert(0, get_clef(final_inst))
+    # ----------------------------------------
+    # 5. Extract original written key signature
+    # ----------------------------------------
+    orig_key_sig = original_part.recurse().getElementsByClass(key.KeySignature).first()
 
-    orig_key = score.analyze('key')
-    new_key_obj = orig_key.transpose(transp_intvl)
-    new_part.insert(0.1, new_key_obj)
+    if orig_key_sig:
+        # Convert KeySignature → Key object
+        orig_key_obj = key.Key(orig_key_sig.asKey())
 
+        # Transpose the key
+        new_key_obj = orig_key_obj.transpose(transp_intvl)
+
+        # Pick cleaner enharmonic (Eb→Bb instead of C#)
+        alt = new_key_obj.getEnharmonic()
+        if abs(alt.sharps) < abs(new_key_obj.sharps):
+            new_key_obj = alt
+
+        # Insert corrected key signature
+        new_part.insert(0.1, key.KeySignature(new_key_obj.sharps))
+
+    # ----------------------------------------
+    # 6. Clef, time signature, tempo
+    # ----------------------------------------
+    target_clef = get_clef(final_inst)
     time_sig = transposed.recurse().getElementsByClass(meter.TimeSignature).first()
-    if time_sig:
-        new_part.insert(0.2, time_sig)
-
     tempo_mark = transposed.recurse().getElementsByClass(tempo.MetronomeMark).first()
-    if tempo_mark:
-        new_part.insert(0.3, tempo_mark)
 
-    for measure in transposed.getElementsByClass(stream.Measure):
+    # ----------------------------------------
+    # 7. Insert measures and clean mid‑measure clefs
+    # ----------------------------------------
+    for i, measure in enumerate(transposed.getElementsByClass(stream.Measure)):
         for c in measure.recurse().getElementsByClass(clef.Clef):
             measure.remove(c)
+
+        if i == 0:
+            if target_clef: measure.insert(0, target_clef)
+            if time_sig:    measure.insert(0, time_sig)
+            if tempo_mark:  measure.insert(0, tempo_mark)
+
         new_part.append(measure)
 
-    for n in new_part.recurse().getElementsByClass('Note'):
-        n.pitch = n.pitch.simplifyEnharmonic()
-    for ch in new_part.recurse().getElementsByClass('Chord'):
-        ch.pitches = [p.simplifyEnharmonic() for p in ch.pitches]
-
+    # ----------------------------------------
+    # 8. Remove trailing empty measures
+    # ----------------------------------------
     measures = list(new_part.getElementsByClass(stream.Measure))
     for m in reversed(measures):
         if len(m.notesAndRests) == 0 or all(n.isRest for n in m.notesAndRests):
@@ -348,15 +378,22 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
         else:
             break
 
+    # ----------------------------------------
+    # 9. Build final score
+    # ----------------------------------------
     new_score = stream.Score()
     new_score.metadata = metadata.Metadata()
     new_score.metadata.title = f"{stem} ({final_inst} Transcription)"
     new_score.metadata.composer = "Arranged by MuseConvert"
     new_score.insert(0, new_part)
 
+    # ----------------------------------------
+    # 10. Clean accidental spelling (based on key)
+    # ----------------------------------------
+    new_score.rewriteAccidentals(inPlace=True)
+
     return new_score
-
-
+    
 # ----------------------------------------
 # MuseScore: MusicXML → PDF (your existing logic)
 # ----------------------------------------
