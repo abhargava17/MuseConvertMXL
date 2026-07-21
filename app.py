@@ -8,7 +8,7 @@ import shutil
 import os
 import time
 
-from music21 import converter, stream, clef, metadata, chord, key, interval, meter, tempo
+from music21 import converter, stream, clef, metadata, chord, key, interval, meter, tempo, pitch
 
 # Simple in-memory log buffer for live debugging
 LIVE_LOGS = []
