@@ -307,9 +307,8 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
     # ---------------------------------------------------------
     i1, i2 = get_transpose_intervals(original_inst, final_inst)
     
-    # CRITICAL: transposeInterval preserves exact diatonic interval qualities
-    # (e.g., P5 + P1 = P5 down, NOT -7 raw semitones which music21 reads as d6)
-    transp_intvl = i1.transposeInterval(i2)
+    # Use standard addition to combine diatonic intervals cleanly:
+    transp_intvl = i1 + i2
 
     # 2. Parse original score
     score = converter.parse(str(input_path))
@@ -323,32 +322,25 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
     new_part.partName = final_inst
 
     # ---------------------------------------------------------
-    # 5. Robust Key Signature Handling (No analyze('key'))
+    # 5. Key Signature Handling (Preserves true C# Major; fixes theoretical keys)
     # ---------------------------------------------------------
     orig_key_sig = original_part.recurse().getElementsByClass(key.KeySignature).first()
     
     if orig_key_sig:
-        # Transpose the actual written key signature
         target_key_sig = orig_key_sig.transpose(transp_intvl)
     else:
-        # Default to C Major / A Minor if no explicit key signature is printed
         target_key_sig = key.KeySignature(0)
 
-    # Automatically fix theoretical keys (> 6 sharps or flats):
-    # - Handles G# Major (+8 sharps) -> Converts to Ab Major (-4 flats)
-    # - Handles Fb Major (-8 flats)  -> Converts to E Major (+4 sharps)
-    if target_key_sig.sharps > 6 or target_key_sig.sharps < -6:
+    # Convert theoretical keys (8+ sharps/flats like G# major) to enharmonic equivalents,
+    # while preserving valid 7-sharp/flat keys like C# Major or Cb Major.
+    if target_key_sig.sharps > 7 or target_key_sig.sharps < -7:
         target_key_sig = target_key_sig.getEnharmonic()
 
-    # ---------------------------------------------------------
     # 6. Clef, time signature, tempo
-    # ---------------------------------------------------------
     target_clef = get_clef(final_inst)
     tempo_mark = transposed.recurse().getElementsByClass(tempo.MetronomeMark).first()
 
-    # ---------------------------------------------------------
     # 7. Insert measures and clean mid‑measure clefs
-    # ---------------------------------------------------------
     for i, measure in enumerate(transposed.getElementsByClass(stream.Measure)):
         for c in measure.recurse().getElementsByClass(clef.Clef):
             measure.remove(c)
@@ -359,7 +351,6 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
             if tempo_mark:
                 measure.insert(0, tempo_mark)
 
-            # Insert the cleaned key signature directly into Measure 1
             measure.insert(0, target_key_sig)
 
         new_part.append(measure)
@@ -381,7 +372,7 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
 
     # 10. Return completed score
     return new_score
-
+    
 # ----------------------------------------
 # MuseScore: MusicXML → PDF (your existing logic)
 # ----------------------------------------
