@@ -308,7 +308,9 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
     i1, i2 = get_transpose_intervals(original_inst, final_inst)
     
     # Use standard addition to combine diatonic intervals cleanly:
-    transp_intvl = i1.add(i2)
+    ref_pitch = pitch.Pitch('C4')
+    target_pitch = ref_pitch.transpose(i1).transpose(i2)
+    transp_intvl = interval.Interval(ref_pitch, target_pitch)
 
     # 2. Parse original score
     score = converter.parse(str(input_path))
