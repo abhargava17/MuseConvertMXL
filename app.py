@@ -302,52 +302,65 @@ def get_clef(instrument_name: str):
         return clef.TrebleClef()
         
 def process_score(input_path: Path, original_inst: str, final_inst: str, stem: str) -> stream.Score:
-    # 1. Compute transposition interval (your fingering model)
+    # ---------------------------------------------------------
+    # 1. Compute diatonic transposition interval
+    # ---------------------------------------------------------
     i1, i2 = get_transpose_intervals(original_inst, final_inst)
-    semitones_total = i1.semitones + i2.semitones
-    transp_intvl = interval.Interval(semitones_total)
+    
+    # CRITICAL: transposeInterval preserves exact diatonic interval qualities
+    # (e.g., P5 + P1 = P5 down, NOT -7 raw semitones which music21 reads as d6)
+    transp_intvl = i1.transposeInterval(i2)
 
     # 2. Parse original score
     score = converter.parse(str(input_path))
     original_part = score.parts[0]
 
-    # --- DEBUG: See what key signatures actually exist in the piece ---
-    print("Key signatures found:")
-    for ks in original_part.recurse().getElementsByClass(key.KeySignature):
-        print("  sharps:", ks.sharps)
-    
-    # 3. Transpose the part (fingering equivalence)
+    # 3. Transpose the part
     transposed = original_part.transpose(transp_intvl)
 
     # 4. Build new part
     new_part = stream.Part()
     new_part.partName = final_inst
 
-    # 5. Determine the correct MUSICAL key AFTER fingering transposition
-    sounding_key = transposed.analyze('key')
+    # ---------------------------------------------------------
+    # 5. Robust Key Signature Handling (No analyze('key'))
+    # ---------------------------------------------------------
+    orig_key_sig = original_part.recurse().getElementsByClass(key.KeySignature).first()
+    
+    if orig_key_sig:
+        # Transpose the actual written key signature
+        target_key_sig = orig_key_sig.transpose(transp_intvl)
+    else:
+        # Default to C Major / A Minor if no explicit key signature is printed
+        target_key_sig = key.KeySignature(0)
 
+    # Automatically fix theoretical keys (> 6 sharps or flats):
+    # - Handles G# Major (+8 sharps) -> Converts to Ab Major (-4 flats)
+    # - Handles Fb Major (-8 flats)  -> Converts to E Major (+4 sharps)
+    if target_key_sig.sharps > 6 or target_key_sig.sharps < -6:
+        target_key_sig = target_key_sig.getEnharmonic()
+
+    # ---------------------------------------------------------
     # 6. Clef, time signature, tempo
+    # ---------------------------------------------------------
     target_clef = get_clef(final_inst)
-    time_sig = transposed.recurse().getElementsByClass(meter.TimeSignature).first()
     tempo_mark = transposed.recurse().getElementsByClass(tempo.MetronomeMark).first()
 
+    # ---------------------------------------------------------
     # 7. Insert measures and clean mid‑measure clefs
+    # ---------------------------------------------------------
     for i, measure in enumerate(transposed.getElementsByClass(stream.Measure)):
-        # Remove old clefs
         for c in measure.recurse().getElementsByClass(clef.Clef):
             measure.remove(c)
 
         if i == 0:
-            # Put everything INSIDE measure 1
             if target_clef:
                 measure.insert(0, target_clef)
-
-            # Do NOT re‑insert time signature (already present)
             if tempo_mark:
                 measure.insert(0, tempo_mark)
 
-            # Insert correct MUSICAL key signature
-            measure.insert(0, key.KeySignature(sounding_key.sharps))
+            # Insert the cleaned key signature directly into Measure 1
+            measure.insert(0, target_key_sig)
 
         new_part.append(measure)
 
@@ -366,7 +379,7 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
     new_score.metadata.composer = "Arranged by MuseConvert"
     new_score.insert(0, new_part)
 
-    # 10. Leave accidentals as music21 spells them under the new key
+    # 10. Return completed score
     return new_score
 
 # ----------------------------------------
