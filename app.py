@@ -149,120 +149,131 @@ async def debug_process(file: UploadFile = File(...), original_instrument: str =
 # ----------------------------------------
 # Transposition intervals (your existing logic)
 # ----------------------------------------
-def get_transpose_intervals(original_inst, final_inst):
-    intvl_1 = None
-    intvl_2 = None
+def instrument_to_viola_interval(inst: str):
+    """
+    Returns (diatonic_interval, octave_shift)
+    where octave_shift is an integer number of 8ves.
+    """
 
-    match original_inst:
-        case "Piccolo": intvl_1 = interval.Interval('-P8')
-        case "Flute": intvl_1 = interval.Interval('-P5')
-        case "Alto Flute": intvl_1 = interval.Interval('-M6')
-        case "Oboe": intvl_1 = interval.Interval('-P5')
-        case "Oboe d'amore": intvl_1 = interval.Interval('-m6')
-        case "English Horn": intvl_1 = interval.Interval('-P8')
-        case "Heckelphone": intvl_1 = interval.Interval('-P8')
-        case "Bass Oboe": intvl_1 = interval.Interval('-P8')
-        case "Clarinet in Bb": intvl_1 = interval.Interval('-M7')
-        case "Clarinet in A": intvl_1 = interval.Interval('-m7')
-        case "Clarinet in Eb": intvl_1 = interval.Interval('-m6')
-        case "Basset Horn": intvl_1 = interval.Interval('-P11')
-        case "Bass Clarinet": intvl_1 = interval.Interval('-P14')
-        case "Bassoon": intvl_1 = interval.Interval('P12')
-        case "Contrabassoon": intvl_1 = interval.Interval('P24')
-        case "Saxophone Bb Soprano": intvl_1 = interval.Interval('-M7')
-        case "Saxophone Eb Alto": intvl_1 = interval.Interval('-M13')
-        case "Saxophone Bb Tenor": intvl_1 = interval.Interval('-P14')
-        case "Saxophone Eb Baritone": intvl_1 = interval.Interval('-P20')
-        case "Saxophone Bb Bass": intvl_1 = interval.Interval('-P21')
-        case "Saxophone Eb Contrabass": intvl_1 = interval.Interval('-P27')
-        case "Horn in F": intvl_1 = interval.Interval('-P24')
-        case "Tuba Bb": intvl_1 = interval.Interval('P24')
-        case "Tuba Eb": intvl_1 = interval.Interval('P30')
-        case "Trumpet in C": intvl_1 = interval.Interval('-P5')
-        case "Trumpet in Bb": intvl_1 = interval.Interval('-M7')
-        case "Trumpet in A": intvl_1 = interval.Interval('-m7')
-        case "Piccolo Trumpet Bb": intvl_1 = interval.Interval('-M7')
-        case "Piccolo Trumpet A": intvl_1 = interval.Interval('-m7')
-        case "Cornet in Bb": intvl_1 = interval.Interval('-M7')
-        case "Flugelhorn": intvl_1 = interval.Interval('-M7')
-        case "Posthorn": intvl_1 = interval.Interval('-M7')
-        case "Pocket Trumpet": intvl_1 = interval.Interval('-M7')
-        case "Alto Trombone": intvl_1 = interval.Interval('-P5')
-        case "Tenor Trombone": intvl_1 = interval.Interval('-P14')
-        case "Bass Trombone": intvl_1 = interval.Interval('-P14')
-        case "Contrabass Trombone": intvl_1 = interval.Interval('P1')
-        case "Euphonium": intvl_1 = interval.Interval('P12')
-        case "Tenor Tuba": intvl_1 = interval.Interval('P12')
-        case "Timpani": intvl_1 = interval.Interval('P1')
-        case "Xylophone": intvl_1 = interval.Interval('-P8')
-        case "Marimba": intvl_1 = interval.Interval('P1')
-        case "Orchestra Bells": intvl_1 = interval.Interval('-P15')
-        case "Glockenspiel": intvl_1 = interval.Interval('-P15')
-        case "Vibraphone": intvl_1 = interval.Interval('P1')
-        case "Chimes": intvl_1 = interval.Interval('P1')
-        case "Guitar": intvl_1 = interval.Interval('P8')
-        case "Violin": intvl_1 = interval.Interval('-P5')
-        case "Viola": intvl_1 = interval.Interval('P1')
-        case "Cello": intvl_1 = interval.Interval('P8')
-        case "Double Bass": intvl_1 = interval.Interval('P16')
-        case _: raise ValueError(f"Unsupported source instrument '{original_inst}'")
+    mapping = {
+        # -------------------------
+        # STRINGS (your logic)
+        # -------------------------
+        "Violin":      ("-P5", 0),
+        "Viola":       ("P1",  0),
+        "Cello":       ("P1",  1),   # P8
+        "Double Bass": ("P1",  2),   # P16
 
-    match final_inst:
-        case "Piccolo": intvl_2 = interval.Interval('P8')
-        case "Flute": intvl_2 = interval.Interval('P5')
-        case "Alto Flute": intvl_2 = interval.Interval('M6')
-        case "Oboe": intvl_2 = interval.Interval('P5')
-        case "Oboe d'amore": intvl_2 = interval.Interval('m6')
-        case "English Horn": intvl_2 = interval.Interval('P8')
-        case "Heckelphone": intvl_2 = interval.Interval('P8')
-        case "Bass Oboe": intvl_2 = interval.Interval('P8')
-        case "Clarinet in Bb": intvl_2 = interval.Interval('M7')
-        case "Clarinet in A": intvl_2 = interval.Interval('m7')
-        case "Clarinet in Eb": intvl_2 = interval.Interval('m6')
-        case "Basset Horn": intvl_2 = interval.Interval('P11')
-        case "Bass Clarinet": intvl_2 = interval.Interval('P14')
-        case "Bassoon": intvl_2 = interval.Interval('-P12')
-        case "Contrabassoon": intvl_2 = interval.Interval('-P24')
-        case "Saxophone Bb Soprano": intvl_2 = interval.Interval('M7')
-        case "Saxophone Eb Alto": intvl_2 = interval.Interval('M13')
-        case "Saxophone Bb Tenor": intvl_2 = interval.Interval('P14')
-        case "Saxophone Eb Baritone": intvl_2 = interval.Interval('P20')
-        case "Saxophone Bb Bass": intvl_2 = interval.Interval('P21')
-        case "Saxophone Eb Contrabass": intvl_2 = interval.Interval('P27')
-        case "Horn in F": intvl_2 = interval.Interval('P24')
-        case "Tuba Bb": intvl_2 = interval.Interval('-P24')
-        case "Tuba Eb": intvl_2 = interval.Interval('-P30')
-        case "Trumpet in C": intvl_2 = interval.Interval('P5')
-        case "Trumpet in Bb": intvl_2 = interval.Interval('M7')
-        case "Trumpet in A": intvl_2 = interval.Interval('m7')
-        case "Piccolo Trumpet Bb": intvl_2 = interval.Interval('M7')
-        case "Piccolo Trumpet A": intvl_2 = interval.Interval('m7')
-        case "Cornet in Bb": intvl_2 = interval.Interval('M7')
-        case "Flugelhorn": intvl_2 = interval.Interval('M7')
-        case "Posthorn": intvl_2 = interval.Interval('M7')
-        case "Pocket Trumpet": intvl_2 = interval.Interval('M7')
-        case "Alto Trombone": intvl_2 = interval.Interval('P5')
-        case "Tenor Trombone": intvl_2 = interval.Interval('P14')
-        case "Bass Trombone": intvl_2 = interval.Interval('P14')
-        case "Contrabass Trombone": intvl_2 = interval.Interval('P1')
-        case "Euphonium": intvl_2 = interval.Interval('-P12')
-        case "Tenor Tuba": intvl_2 = interval.Interval('-P12')
-        case "Timpani": intvl_2 = interval.Interval('P1')
-        case "Xylophone": intvl_2 = interval.Interval('P8')
-        case "Marimba": intvl_2 = interval.Interval('P1')
-        case "Orchestra Bells": intvl_2 = interval.Interval('P15')
-        case "Glockenspiel": intvl_2 = interval.Interval('P15')
-        case "Vibraphone": intvl_2 = interval.Interval('P1')
-        case "Chimes": intvl_2 = interval.Interval('P1')
-        case "Guitar": intvl_2 = interval.Interval('-P8')
-        case "Violin": intvl_2 = interval.Interval('P5')
-        case "Viola": intvl_2 = interval.Interval('P1')
-        case "Cello": intvl_2 = interval.Interval('-P8')
-        case "Double Bass": intvl_2 = interval.Interval('-P16')
-        case _: raise ValueError(f"Unsupported target instrument '{final_inst}'")
+        # -------------------------
+        # SAXOPHONES (your logic)
+        # -------------------------
+        "Saxophone Bb Soprano": ("-M7", 0),
+        "Saxophone Eb Alto":    ("-M6", -1),  # -M13 = -M6 - P8
+        "Saxophone Bb Tenor":   ("-P6", -1),  # -P14 = -P6 - P8
+        "Saxophone Eb Baritone":("-P4", -2),  # -P20 = -P4 - 2×P8
+        "Saxophone Bb Bass":    ("-P5", -2),  # -P21 = -P5 - 2×P8
+        "Saxophone Eb Contrabass": ("-P3", -3), # -P27 = -P3 - 3×P8
 
-    return intvl_1, intvl_2
+        # -------------------------
+        # CLARINETS (your logic)
+        # -------------------------
+        "Clarinet in Bb": ("-M7", 0),
+        "Clarinet in A":  ("-m7", 0),
+        "Clarinet in Eb": ("-m6", 0),
+        "Bass Clarinet":  ("-P6", -1),  # -P14 = -P6 - P8
+        "Basset Horn":    ("-P11", 0),  # stays as is
 
+        # -------------------------
+        # FLUTES / OBOES (your logic)
+        # -------------------------
+        "Piccolo":        ("-P8", 0),
+        "Flute":          ("-P5", 0),
+        "Alto Flute":     ("-M6", 0),
+        "Oboe":           ("-P5", 0),
+        "Oboe d'amore":   ("-m6", 0),
+        "English Horn":   ("-P8", 0),
+        "Heckelphone":    ("-P8", 0),
+        "Bass Oboe":      ("-P8", 0),
+
+        # -------------------------
+        # BRASS (your logic)
+        # -------------------------
+        "Horn in F":      ("-P8", -1),  # -P24 = -P8 - 2×P8
+        "Trumpet in C":   ("-P5", 0),
+        "Trumpet in Bb":  ("-M7", 0),
+        "Trumpet in A":   ("-m7", 0),
+        "Cornet in Bb":   ("-M7", 0),
+        "Flugelhorn":     ("-M7", 0),
+        "Posthorn":       ("-M7", 0),
+        "Pocket Trumpet": ("-M7", 0),
+
+        # -------------------------
+        # LOW BRASS (your logic)
+        # -------------------------
+        "Tenor Trombone": ("-P6", -1),  # -P14 = -P6 - P8
+        "Bass Trombone":  ("-P6", -1),
+        "Contrabass Trombone": ("P1", 0),
+
+        "Euphonium":      ("P1", 1),  # P12 = P1 + P8
+        "Tenor Tuba":     ("P1", 1),
+
+        "Tuba Bb":        ("P1", 1),  # P24 = P1 + 2×P8
+        "Tuba Eb":        ("P1", 2),  # P30 = P1 + 3×P8
+
+        # -------------------------
+        # PERCUSSION (your logic)
+        # -------------------------
+        "Xylophone":      ("-P8", 0),
+        "Marimba":        ("P1", 0),
+        "Orchestra Bells":("-P7", -1),  # -P15 = -P7 - P8
+        "Glockenspiel":   ("-P7", -1),
+        "Vibraphone":     ("P1", 0),
+        "Chimes":         ("P1", 0),
+
+        # -------------------------
+        # GUITAR
+        # -------------------------
+        "Guitar":         ("P1", 1),  # P8
+    }
+
+    if inst not in mapping:
+        raise ValueError(f"Unsupported instrument '{inst}'")
+
+    return mapping[inst]
+
+def viola_to_instrument_interval(inst):
+    d, o = instrument_to_viola_interval(inst)
+
+    # invert diatonic
+    inv_diatonic = interval.Interval(d).reverse().directedName
+
+    # invert octave shift
+    inv_octaves = -o
+
+    return (inv_diatonic, inv_octaves)
+
+def build_interval(diatonic: str, octaves: int):
+    base = interval.Interval(diatonic)
+    for _ in range(abs(octaves)):
+        if octaves > 0:
+            base = base + interval.Interval('P8')
+        else:
+            base = base + interval.Interval('-P8')
+    return base
+
+def get_transpose_interval(original_inst: str, final_inst: str):
+    # original → viola
+    d1, o1 = instrument_to_viola_interval(original_inst)
+    i1 = build_interval(d1, o1)
+
+    # viola → final
+    d2, o2 = viola_to_instrument_interval(final_inst)
+    i2 = build_interval(d2, o2)
+
+    # combine
+    ref = pitch.Pitch('C4')
+    target = ref.transpose(i1).transpose(i2)
+    return interval.Interval(ref, target)
 
 # ----------------------------------------
 # Clef map (your existing logic)
@@ -303,14 +314,9 @@ def get_clef(instrument_name: str):
         
 def process_score(input_path: Path, original_inst: str, final_inst: str, stem: str) -> stream.Score:
     # ---------------------------------------------------------
-    # 1. Compute diatonic transposition interval
+    # 1. Compute transposition interval (new logic)
     # ---------------------------------------------------------
-    i1, i2 = get_transpose_intervals(original_inst, final_inst)
-    
-    # Use standard addition to combine diatonic intervals cleanly:
-    ref_pitch = pitch.Pitch('C4')
-    target_pitch = ref_pitch.transpose(i1).transpose(i2)
-    transp_intvl = interval.Interval(ref_pitch, target_pitch)
+    transp_intvl = get_transpose_interval(original_inst, final_inst)
 
     # 2. Parse original score
     score = converter.parse(str(input_path))
@@ -324,7 +330,7 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
     new_part.partName = final_inst
 
     # ---------------------------------------------------------
-    # 5. Key Signature Handling (Preserves true C# Major; fixes theoretical keys)
+    # 5. Key Signature Handling
     # ---------------------------------------------------------
     orig_key_sig = original_part.recurse().getElementsByClass(key.KeySignature).first()
     
@@ -333,8 +339,6 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
     else:
         target_key_sig = key.KeySignature(0)
 
-    # Convert theoretical keys (8+ sharps/flats like G# major) to enharmonic equivalents,
-    # while preserving valid 7-sharp/flat keys like C# Major or Cb Major.
     if target_key_sig.sharps > 7 or target_key_sig.sharps < -7:
         target_key_sig = target_key_sig.getEnharmonic()
 
@@ -352,7 +356,6 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
                 measure.insert(0, target_clef)
             if tempo_mark:
                 measure.insert(0, tempo_mark)
-
             measure.insert(0, target_key_sig)
 
         new_part.append(measure)
@@ -372,7 +375,6 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
     new_score.metadata.composer = "Arranged by MuseConvert"
     new_score.insert(0, new_part)
 
-    # 10. Return completed score
     return new_score
     
 # ----------------------------------------
@@ -540,7 +542,7 @@ async def convert_pdf(
         # STEP 1 — PDF → MusicXML (Audiveris)
         musicxml_path = run_audiveris_on_pdf(pdf_path, temp_dir)
 
-        # STEP 2 — MusicXML → transposed MusicXML (your existing pipeline)
+        # STEP 2 — MusicXML → transposed MusicXML 
         new_score = process_score(
             musicxml_path,
             original_instrument,
