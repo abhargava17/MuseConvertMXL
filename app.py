@@ -350,16 +350,26 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
 
     # 7. Insert measures and clean mid‑measure clefs
     for i, measure in enumerate(transposed.getElementsByClass(stream.Measure)):
+        # Remove mid‑measure clefs
         for c in measure.recurse().getElementsByClass(clef.Clef):
             measure.remove(c)
-
+    
+        # Insert clef, tempo, key in first measure
         if i == 0:
             if target_clef:
                 measure.insert(0, target_clef)
             if tempo_mark:
                 measure.insert(0, tempo_mark)
             measure.insert(0, target_key_sig)
-
+    
+        # ⭐ PATCH: Clamp invalid pitch octaves to prevent MuseScore crash
+        for n in measure.notes:
+            if hasattr(n, "pitch"):
+                if n.pitch.octave < 0:
+                    n.pitch.octave = 0
+                elif n.pitch.octave > 8:
+                    n.pitch.octave = 8
+    
         new_part.append(measure)
 
     # 8. Remove trailing empty measures
