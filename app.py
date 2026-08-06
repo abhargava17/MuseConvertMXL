@@ -253,13 +253,21 @@ def viola_to_instrument_interval(inst):
     return (inv_diatonic, inv_octaves)
 
 def build_interval(diatonic: str, octaves: int):
-    base = interval.Interval(diatonic)
+    # Start from a reference pitch
+    ref = pitch.Pitch('C4')
+
+    # Apply diatonic interval
+    p = ref.transpose(interval.Interval(diatonic))
+
+    # Apply octave shifts
     for _ in range(abs(octaves)):
         if octaves > 0:
-            base = base + interval.Interval('P8')
+            p = p.transpose(interval.Interval('P8'))
         else:
-            base = base + interval.Interval('-P8')
-    return base
+            p = p.transpose(interval.Interval('-P8'))
+
+    # Build final interval from ref → p
+    return interval.Interval(ref, p)
 
 def get_transpose_interval(original_inst: str, final_inst: str):
     # original → viola
