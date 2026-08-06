@@ -363,12 +363,12 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
             measure.insert(0, target_key_sig)
     
         # ⭐ PATCH: Clamp invalid pitch octaves to prevent MuseScore crash
-        for n in measure.notes:
-            if hasattr(n, "pitch"):
-                if n.pitch.octave < 0:
-                    n.pitch.octave = 0
-                elif n.pitch.octave > 8:
-                    n.pitch.octave = 8
+        for el in measure.recurse():
+            if hasattr(el, "pitch"):
+                if el.pitch.octave < 0:
+                    el.pitch.octave = 0
+                elif el.pitch.octave > 8:
+                    el.pitch.octave = 8
     
         new_part.append(measure)
 
