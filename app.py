@@ -149,96 +149,90 @@ async def debug_process(file: UploadFile = File(...), original_instrument: str =
 # ----------------------------------------
 # Transposition intervals (your existing logic)
 # ----------------------------------------
-def instrument_to_viola_interval(inst: str):
-    """
-    Returns (diatonic_interval, octave_shift)
-    where octave_shift is an integer number of 8ves.
-    """
-
+def instrument_to_viola_range_shift(inst: str):
+    # Format: (Base Diatonic Interval String, Octave Offset)
+    # Negative interval string means shift DOWN, Positive means UP
     mapping = {
         # -------------------------
-        # STRINGS (your logic)
+        # STRINGS
         # -------------------------
-        "Violin":      ("-P5", 0),
-        "Viola":       ("P1",  0),
-        "Cello":       ("P1",  1),   # P8
-        "Double Bass": ("P1",  2),   # P16
+        "Violin": ("-P5", 0),        # Shift down a Perfect 5th to hit the C-string
+        "Viola": ("P1", 0),         # Perfect unison (no change)
+        "Cello": ("P1", 1),         # Shift up 1 octave (reads alto clef easily)
+        "Double Bass": ("P1", 2),    # Shift up 2 octaves
 
         # -------------------------
-        # SAXOPHONES (your logic)
+        # SAXOPHONES (Range Shifts)
         # -------------------------
-        "Saxophone Bb Soprano": ("-M7", 0),
-        "Saxophone Eb Alto":    ("-M6", -1),  # -M13 = -M6 - P8
-        "Saxophone Bb Tenor":   ("-P6", -1),  # -P14 = -P6 - P8
-        "Saxophone Eb Baritone":("-P4", -2),  # -P20 = -P4 - 2×P8
-        "Saxophone Bb Bass":    ("-P5", -2),  # -P21 = -P5 - 2×P8
-        "Saxophone Eb Contrabass": ("-P3", -3), # -P27 = -P3 - 3×P8
+        "Saxophone Bb Soprano": ("-M7", 0),   # Shift down a Major 7th
+        "Saxophone Eb Alto": ("-M6", -1),      # Shift down a Major 13th (-M6 - 1 octave)
+        "Saxophone Bb Tenor": ("-m7", -1),     # Shift down a minor 14th (-m7 - 1 octave)
+        "Saxophone Eb Baritone":("-P4", -2),   # Shift down a Perfect 18th (-P4 - 2 octaves)
+        "Saxophone Bb Bass": ("-m7", -2),      # Shift down a minor 21st (-m7 - 2 octaves)
+        "Saxophone Eb Contrabass": ("-P4", -3),# Shift down a Perfect 25th (-P4 - 3 octaves)
 
         # -------------------------
-        # CLARINETS (your logic)
+        # CLARINETS
         # -------------------------
         "Clarinet in Bb": ("-M7", 0),
-        "Clarinet in A":  ("-m7", 0),
+        "Clarinet in A": ("-m7", 0),
         "Clarinet in Eb": ("-m6", 0),
-        "Bass Clarinet":  ("-P6", -1),  # -P14 = -P6 - P8
-        "Basset Horn":    ("-P11", 0),  # stays as is
+        "Bass Clarinet": ("-m7", -1),          # Shift down a minor 14th (-m7 - 1 octave)
+        "Basset Horn": ("-P4", -1),            # Shift down a Perfect 11th (-P4 - 1 octave)
 
         # -------------------------
-        # FLUTES / OBOES (your logic)
+        # FLUTES / OBOES
         # -------------------------
-        "Piccolo":        ("-P8", 0),
-        "Flute":          ("-P5", 0),
-        "Alto Flute":     ("-M6", 0),
-        "Oboe":           ("-P5", 0),
-        "Oboe d'amore":   ("-m6", 0),
-        "English Horn":   ("-P8", 0),
-        "Heckelphone":    ("-P8", 0),
-        "Bass Oboe":      ("-P8", 0),
+        "Piccolo": ("-P8", 0),                 # Shift down an octave
+        "Flute": ("-P5", 0),                   # Shift down a Perfect 5th
+        "Alto Flute": ("-M6", 0),              # Shift down a Major 6th
+        "Oboe": ("-P5", 0),                    # Shift down a Perfect 5th
+        "Oboe d'amore": ("-m6", 0),            # Shift down a minor 6th
+        "English Horn": ("-P8", 0),            # Shift down an octave
+        "Heckelphone": ("-P8", 0),
+        "Bass Oboe": ("-P8", 0),
 
         # -------------------------
-        # BRASS (your logic)
+        # BRASS
         # -------------------------
-        "Horn in F":      ("-P8", -1),  # -P24 = -P8 - 2×P8
-        "Trumpet in C":   ("-P5", 0),
-        "Trumpet in Bb":  ("-M7", 0),
-        "Trumpet in A":   ("-m7", 0),
-        "Cornet in Bb":   ("-M7", 0),
-        "Flugelhorn":     ("-M7", 0),
-        "Posthorn":       ("-M7", 0),
+        "Horn in F": ("-m7", -2),              # Shift down a minor 21st (-m7 - 2 octaves)
+        "Trumpet in C": ("-P5", 0),
+        "Trumpet in Bb": ("-M7", 0),
+        "Trumpet in A": ("-m7", 0),
+        "Cornet in Bb": ("-M7", 0),
+        "Flugelhorn": ("-M7", 0),
+        "Posthorn": ("-M7", 0),
         "Pocket Trumpet": ("-M7", 0),
 
         # -------------------------
-        # LOW BRASS (your logic)
+        # LOW BRASS
         # -------------------------
-        "Tenor Trombone": ("-P6", -1),  # -P14 = -P6 - P8
-        "Bass Trombone":  ("-P6", -1),
+        "Tenor Trombone": ("-m7", -1),         # Shift down a minor 14th (-m7 - 1 octave)
+        "Bass Trombone": ("-m7", -1),
         "Contrabass Trombone": ("P1", 0),
-
-        "Euphonium":      ("P1", 1),  # P12 = P1 + P8
-        "Tenor Tuba":     ("P1", 1),
-
-        "Tuba Bb":        ("P1", 1),  # P24 = P1 + 2×P8
-        "Tuba Eb":        ("P1", 2),  # P30 = P1 + 3×P8
+        "Euphonium": ("P1", 1),                # Shift up an octave
+        "Tenor Tuba": ("P1", 1),               # Shift up an octave
+        "Tuba Bb": ("P1", 2),                  # Shift up 2 octaves
+        "Tuba Eb": ("P1", 3),                  # Shift up 3 octaves
 
         # -------------------------
-        # PERCUSSION (your logic)
+        # PERCUSSION
         # -------------------------
-        "Xylophone":      ("-P8", 0),
-        "Marimba":        ("P1", 0),
-        "Orchestra Bells":("-P7", -1),  # -P15 = -P7 - P8
-        "Glockenspiel":   ("-P7", -1),
-        "Vibraphone":     ("P1", 0),
-        "Chimes":         ("P1", 0),
+        "Xylophone": ("-P8", 0),
+        "Marimba": ("P1", 0),
+        "Orchestra Bells": ("-P8", -1),        # Shift down 2 octaves (a clean P15 shift down)
+        "Glockenspiel": ("-P8", -1),           # Shift down 2 octaves
+        "Vibraphone": ("P1", 0),
+        "Chimes": ("P1", 0),
 
         # -------------------------
         # GUITAR
         # -------------------------
-        "Guitar":         ("P1", 1),  # P8
+        "Guitar": ("P1", 1),                   # Shift up 1 octave
     }
-
+    
     if inst not in mapping:
         raise ValueError(f"Unsupported instrument '{inst}'")
-
     return mapping[inst]
 
 def viola_to_instrument_interval(inst):
