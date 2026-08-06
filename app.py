@@ -149,7 +149,7 @@ async def debug_process(file: UploadFile = File(...), original_instrument: str =
 # ----------------------------------------
 # Transposition intervals (your existing logic)
 # ----------------------------------------
-def instrument_to_viola_range_shift(inst: str):
+def instrument_to_viola_interval(inst: str):
     # Format: (Base Diatonic Interval String, Octave Offset)
     # Negative interval string means shift DOWN, Positive means UP
     mapping = {
