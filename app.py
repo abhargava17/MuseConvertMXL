@@ -559,15 +559,16 @@ async def convert(
         )
 
 @app.get("/download/{job_id}")
-def download(job_id: str, name: str = None):
+def download(job_id: str, name: str = None, inst: str = None):
     pdf_path = STORAGE_DIR / f"{job_id}.pdf"
     if not pdf_path.exists():
         return JSONResponse(status_code=404, content={"error": "PDF not found"})
 
     safe_name = name or job_id
+    safe_inst = inst or "Converted"
 
     return FileResponse(
         path=str(pdf_path),
-        filename=f"{safe_name}_{final_instrument}.pdf",
+        filename=f"{safe_name}_{safe_inst}.pdf",
         media_type="application/pdf"
     )
