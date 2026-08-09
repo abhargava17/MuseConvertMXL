@@ -7,16 +7,23 @@ import tempfile
 import shutil
 import os
 import time
+import uuid
+import traceback
 
 from music21 import converter, stream, clef, metadata, chord, key, interval, meter, tempo, pitch
 
-# Simple in-memory log buffer for live debugging
+# ----------------------------------------
+# Live logs (debug buffer)
+# ----------------------------------------
 LIVE_LOGS = []
 
 def live_log(msg: str):
     LIVE_LOGS.append(msg)
     print(msg)
 
+# ----------------------------------------
+# FastAPI setup
+# ----------------------------------------
 app = FastAPI(title="MuseConvert PDF Instrument Converter")
 
 app.add_middleware(
@@ -33,6 +40,23 @@ BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_STYLE_PATH = BASE_DIR / "styles" / "default.mss"
 STYLE_FILE = Path(os.getenv("MUSESCORE_STYLE", str(DEFAULT_STYLE_PATH)))
 
+# ----------------------------------------
+# Persistent storage for final PDFs
+# ----------------------------------------
+STORAGE_DIR = BASE_DIR / "storage"
+STORAGE_DIR.mkdir(exist_ok=True)
+
+# ----------------------------------------
+# Progress tracking
+# ----------------------------------------
+progress = {}   # { job_id: "stage" }
+
+def update_progress(job_id: str, stage: str):
+    progress[job_id] = stage
+
+@app.get("/status/{job_id}")
+def get_status(job_id: str):
+    return {"stage": progress.get(job_id, "unknown")}
 
 # ----------------------------------------
 # Health
@@ -40,7 +64,6 @@ STYLE_FILE = Path(os.getenv("MUSESCORE_STYLE", str(DEFAULT_STYLE_PATH)))
 @app.get("/")
 def root():
     return {"service": "MuseConvert PDF Instrument Converter", "status": "running"}
-
 
 @app.get("/healthz")
 def health():
@@ -55,9 +78,9 @@ def debug():
     results["mscore_exists"] = Path(MUSESCORE_CLI).exists()
     results["audiveris_exists"] = Path(AUDIVERIS_CLI).exists()
 
-    # MuseScore version
     env = os.environ.copy()
     env["QT_QPA_PLATFORM"] = "offscreen"
+
     r = subprocess.run(
         [MUSESCORE_CLI, "--version"],
         capture_output=True,
@@ -66,7 +89,6 @@ def debug():
     )
     results["mscore_version"] = r.stdout.strip() or r.stderr.strip()
 
-    # Audiveris version
     r2 = subprocess.run(
         [AUDIVERIS_CLI, "-version"],
         capture_output=True,
@@ -76,9 +98,16 @@ def debug():
 
     return results
 
+@app.get("/debug-logs")
+def debug_logs():
+    return {"logs": LIVE_LOGS[-200:]}
 
 @app.post("/debug-process")
-async def debug_process(file: UploadFile = File(...), original_instrument: str = Form(...), final_instrument: str = Form(...)):
+async def debug_process(
+    file: UploadFile = File(...), 
+    original_instrument: str = Form(...), 
+    final_instrument: str = Form(...)
+):
     LIVE_LOGS.clear()
     live_log("🚀 Starting debug pipeline")
 
@@ -110,7 +139,6 @@ async def debug_process(file: UploadFile = File(...), original_instrument: str =
             transposed_xml = temp_dir / f"transposed_{musicxml_path.stem}.musicxml"
             new_score.write("musicxml", fp=str(transposed_xml))
         except Exception as e:
-            import traceback
             return {
                 "stage": "music21",
                 "status": "error",
@@ -122,7 +150,6 @@ async def debug_process(file: UploadFile = File(...), original_instrument: str =
         try:
             pdf_out = run_musescore_to_pdf(transposed_xml, temp_dir)
         except Exception as e:
-            import traceback
             return {
                 "stage": "musescore",
                 "status": "error",
@@ -130,7 +157,7 @@ async def debug_process(file: UploadFile = File(...), original_instrument: str =
                 "traceback": traceback.format_exc()[-2000:]
             }
 
-        # SUCCESS — return metadata
+        # SUCCESS
         return {
             "stage": "complete",
             "status": "ok",
@@ -147,55 +174,43 @@ async def debug_process(file: UploadFile = File(...), original_instrument: str =
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 # ----------------------------------------
-# Transposition intervals (your existing logic)
+# Transposition Engine
 # ----------------------------------------
 def instrument_to_viola_interval(inst: str):
-    # Format: (Base Diatonic Interval String, Octave Offset)
-    # Negative interval string means shift DOWN, Positive means UP
     mapping = {
-        # -------------------------
         # STRINGS
-        # -------------------------
-        "Violin": ("-P5", 0),        # Shift down a Perfect 5th to hit the C-string
-        "Viola": ("P1", 0),         # Perfect unison (no change)
-        "Cello": ("P1", 1),         # Shift up 1 octave (reads alto clef easily)
-        "Double Bass": ("P1", 2),    # Shift up 2 octaves
+        "Violin": ("-P5", 0),
+        "Viola": ("P1", 0),
+        "Cello": ("P1", 1),
+        "Double Bass": ("P1", 2),
 
-        # -------------------------
-        # SAXOPHONES (Range Shifts)
-        # -------------------------
-        "Saxophone Bb Soprano": ("-M7", 0),   # Shift down a Major 7th
-        "Saxophone Eb Alto": ("-M6", -1),      # Shift down a Major 13th (-M6 - 1 octave)
-        "Saxophone Bb Tenor": ("-m7", -1),     # Shift down a minor 14th (-m7 - 1 octave)
-        "Saxophone Eb Baritone":("-P4", -2),   # Shift down a Perfect 18th (-P4 - 2 octaves)
-        "Saxophone Bb Bass": ("-m7", -2),      # Shift down a minor 21st (-m7 - 2 octaves)
-        "Saxophone Eb Contrabass": ("-P4", -3),# Shift down a Perfect 25th (-P4 - 3 octaves)
+        # SAXOPHONES
+        "Saxophone Bb Soprano": ("-M7", 0),
+        "Saxophone Eb Alto": ("-M6", -1),
+        "Saxophone Bb Tenor": ("-m7", -1),
+        "Saxophone Eb Baritone": ("-P4", -2),
+        "Saxophone Bb Bass": ("-m7", -2),
+        "Saxophone Eb Contrabass": ("-P4", -3),
 
-        # -------------------------
         # CLARINETS
-        # -------------------------
         "Clarinet in Bb": ("-M7", 0),
         "Clarinet in A": ("-m7", 0),
         "Clarinet in Eb": ("-m6", 0),
-        "Bass Clarinet": ("-m7", -1),          # Shift down a minor 14th (-m7 - 1 octave)
-        "Basset Horn": ("-P4", -1),            # Shift down a Perfect 11th (-P4 - 1 octave)
+        "Bass Clarinet": ("-m7", -1),
+        "Basset Horn": ("-P4", -1),
 
-        # -------------------------
         # FLUTES / OBOES
-        # -------------------------
-        "Piccolo": ("-P8", 0),                 # Shift down an octave
-        "Flute": ("-P5", 0),                   # Shift down a Perfect 5th
-        "Alto Flute": ("-M6", 0),              # Shift down a Major 6th
-        "Oboe": ("-P5", 0),                    # Shift down a Perfect 5th
-        "Oboe d'amore": ("-m6", 0),            # Shift down a minor 6th
-        "English Horn": ("-P8", 0),            # Shift down an octave
+        "Piccolo": ("-P8", 0),
+        "Flute": ("-P5", 0),
+        "Alto Flute": ("-M6", 0),
+        "Oboe": ("-P5", 0),
+        "Oboe d'amore": ("-m6", 0),
+        "English Horn": ("-P8", 0),
         "Heckelphone": ("-P8", 0),
         "Bass Oboe": ("-P8", 0),
 
-        # -------------------------
         # BRASS
-        # -------------------------
-        "Horn in F": ("-m7", -2),              # Shift down a minor 21st (-m7 - 2 octaves)
+        "Horn in F": ("-m7", -2),
         "Trumpet in C": ("-P5", 0),
         "Trumpet in Bb": ("-M7", 0),
         "Trumpet in A": ("-m7", 0),
@@ -204,82 +219,59 @@ def instrument_to_viola_interval(inst: str):
         "Posthorn": ("-M7", 0),
         "Pocket Trumpet": ("-M7", 0),
 
-        # -------------------------
         # LOW BRASS
-        # -------------------------
-        "Tenor Trombone": ("-m7", -1),         # Shift down a minor 14th (-m7 - 1 octave)
+        "Tenor Trombone": ("-m7", -1),
         "Bass Trombone": ("-m7", -1),
         "Contrabass Trombone": ("P1", 0),
-        "Euphonium": ("P1", 1),                # Shift up an octave
-        "Tenor Tuba": ("P1", 1),               # Shift up an octave
-        "Tuba Bb": ("P1", 2),                  # Shift up 2 octaves
-        "Tuba Eb": ("P1", 3),                  # Shift up 3 octaves
+        "Euphonium": ("P1", 1),
+        "Tenor Tuba": ("P1", 1),
+        "Tuba Bb": ("P1", 2),
+        "Tuba Eb": ("P1", 3),
 
-        # -------------------------
         # PERCUSSION
-        # -------------------------
         "Xylophone": ("-P8", 0),
         "Marimba": ("P1", 0),
-        "Orchestra Bells": ("-P8", -1),        # Shift down 2 octaves (a clean P15 shift down)
-        "Glockenspiel": ("-P8", -1),           # Shift down 2 octaves
+        "Orchestra Bells": ("-P8", -1),
+        "Glockenspiel": ("-P8", -1),
         "Vibraphone": ("P1", 0),
         "Chimes": ("P1", 0),
 
-        # -------------------------
         # GUITAR
-        # -------------------------
-        "Guitar": ("P1", 1),                   # Shift up 1 octave
+        "Guitar": ("P1", 1),
     }
-    
+
     if inst not in mapping:
         raise ValueError(f"Unsupported instrument '{inst}'")
     return mapping[inst]
 
-def viola_to_instrument_interval(inst):
+def viola_to_instrument_interval(inst: str):
     d, o = instrument_to_viola_interval(inst)
-
-    # invert diatonic
     inv_diatonic = interval.Interval(d).reverse().directedName
-
-    # invert octave shift
     inv_octaves = -o
-
     return (inv_diatonic, inv_octaves)
 
 def build_interval(diatonic: str, octaves: int):
-    # Start from a reference pitch
     ref = pitch.Pitch('C4')
-
-    # Apply diatonic interval
     p = ref.transpose(interval.Interval(diatonic))
-
-    # Apply octave shifts
     for _ in range(abs(octaves)):
         if octaves > 0:
             p = p.transpose(interval.Interval('P8'))
         else:
             p = p.transpose(interval.Interval('-P8'))
-
-    # Build final interval from ref → p
     return interval.Interval(ref, p)
 
 def get_transpose_interval(original_inst: str, final_inst: str):
-    # original → viola
     d1, o1 = instrument_to_viola_interval(original_inst)
     i1 = build_interval(d1, o1)
 
-    # viola → final
     d2, o2 = viola_to_instrument_interval(final_inst)
     i2 = build_interval(d2, o2)
 
-    # combine
     ref = pitch.Pitch('C4')
     target = ref.transpose(i1).transpose(i2)
     return interval.Interval(ref, target)
 
-# ----------------------------------------
-# Clef map (your existing logic)
-# ----------------------------------------
+# Clef assignments
 TREBLE_INSTRUMENTS = {
     "Piccolo", "Flute", "Alto Flute", "Oboe", "Oboe d'amore",
     "English Horn", "Heckelphone", "Bass Oboe",
@@ -291,10 +283,8 @@ TREBLE_INSTRUMENTS = {
     "Horn in F", "Trumpet in C", "Trumpet in Bb", "Trumpet in A",
     "Piccolo Trumpet Bb", "Piccolo Trumpet A",
     "Cornet in Bb", "Flugelhorn", "Posthorn", "Pocket Trumpet",
-    "Alto Trombone",
-    "Xylophone", "Marimba", "Orchestra Bells",
-    "Glockenspiel", "Vibraphone", "Chimes",
-    "Guitar", "Violin",
+    "Alto Trombone", "Xylophone", "Marimba", "Orchestra Bells",
+    "Glockenspiel", "Vibraphone", "Chimes", "Guitar", "Violin",
 }
 
 ALTO_INSTRUMENTS = {"Viola"}
@@ -302,8 +292,7 @@ ALTO_INSTRUMENTS = {"Viola"}
 BASS_INSTRUMENTS = {
     "Cello", "Double Bass", "Bassoon", "Contrabassoon",
     "Tenor Trombone", "Bass Trombone", "Contrabass Trombone",
-    "Euphonium", "Tenor Tuba", "Tuba Bb", "Tuba Eb",
-    "Timpani",
+    "Euphonium", "Tenor Tuba", "Tuba Bb", "Tuba Eb", "Timpani",
 }
 
 def get_clef(instrument_name: str):
@@ -313,29 +302,18 @@ def get_clef(instrument_name: str):
         return clef.BassClef()
     else:
         return clef.TrebleClef()
-        
+
 def process_score(input_path: Path, original_inst: str, final_inst: str, stem: str) -> stream.Score:
-    # ---------------------------------------------------------
-    # 1. Compute transposition interval (new logic)
-    # ---------------------------------------------------------
     transp_intvl = get_transpose_interval(original_inst, final_inst)
 
-    # 2. Parse original score
     score = converter.parse(str(input_path))
     original_part = score.parts[0]
-
-    # 3. Transpose the part
     transposed = original_part.transpose(transp_intvl)
 
-    # 4. Build new part
     new_part = stream.Part()
     new_part.partName = final_inst
 
-    # ---------------------------------------------------------
-    # 5. Key Signature Handling
-    # ---------------------------------------------------------
     orig_key_sig = original_part.recurse().getElementsByClass(key.KeySignature).first()
-    
     if orig_key_sig:
         target_key_sig = orig_key_sig.transpose(transp_intvl)
     else:
@@ -344,35 +322,31 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
     if target_key_sig.sharps > 7 or target_key_sig.sharps < -7:
         target_key_sig = target_key_sig.getEnharmonic()
 
-    # 6. Clef, time signature, tempo
     target_clef = get_clef(final_inst)
     tempo_mark = transposed.recurse().getElementsByClass(tempo.MetronomeMark).first()
 
-    # 7. Insert measures and clean mid‑measure clefs
     for i, measure in enumerate(transposed.getElementsByClass(stream.Measure)):
-        # Remove mid‑measure clefs
         for c in measure.recurse().getElementsByClass(clef.Clef):
             measure.remove(c)
-    
-        # Insert clef, tempo, key in first measure
+
         if i == 0:
             if target_clef:
                 measure.insert(0, target_clef)
             if tempo_mark:
                 measure.insert(0, tempo_mark)
             measure.insert(0, target_key_sig)
-    
-        # ⭐ PATCH: Clamp invalid pitch octaves to prevent MuseScore crash
+
+        # Safety patch: clamp octaves to avoid MuseScore crash
         for el in measure.recurse():
-            if hasattr(el, "pitch"):
+            if hasattr(el, "pitch") and el.pitch is not None:
                 if el.pitch.octave < 0:
                     el.pitch.octave = 0
                 elif el.pitch.octave > 8:
                     el.pitch.octave = 8
-    
+
         new_part.append(measure)
 
-    # 8. Remove trailing empty measures
+    # Trim trailing empty measures
     measures = list(new_part.getElementsByClass(stream.Measure))
     for m in reversed(measures):
         if len(m.notesAndRests) == 0 or all(n.isRest for n in m.notesAndRests):
@@ -380,7 +354,6 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
         else:
             break
 
-    # 9. Build final score
     new_score = stream.Score()
     new_score.metadata = metadata.Metadata()
     new_score.metadata.title = f"{stem} ({final_inst} Transcription)"
@@ -388,9 +361,55 @@ def process_score(input_path: Path, original_inst: str, final_inst: str, stem: s
     new_score.insert(0, new_part)
 
     return new_score
-    
+
 # ----------------------------------------
-# MuseScore: MusicXML → PDF (your existing logic)
+# Audiveris OMR
+# ----------------------------------------
+def run_audiveris_on_pdf(pdf_path: Path, out_dir: Path) -> Path:
+    cmd = [
+        AUDIVERIS_CLI,
+        "-batch",
+        "-export",
+        "-output", str(out_dir),
+        str(pdf_path),
+    ]
+
+    live_log("▶ Audiveris OMR (PDF → MusicXML)")
+    live_log(f"$ {' '.join(cmd)}")
+
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True
+    )
+
+    start_time = time.time()
+    TIMEOUT = 900  # 15 minutes
+
+    for line in process.stdout:
+        live_log(line.rstrip())
+        if time.time() - start_time > TIMEOUT:
+            process.kill()
+            live_log("❌ Audiveris timed out after 900 seconds")
+            raise TimeoutError("Audiveris timed out")
+
+    process.wait()
+
+    if process.returncode != 0:
+        live_log(f"❌ Audiveris failed with code {process.returncode}")
+        raise RuntimeError(f"Audiveris failed (exit {process.returncode})")
+
+    live_log("✔ Audiveris OMR completed")
+
+    candidates = list(out_dir.glob("*.xml")) + list(out_dir.glob("*.mxl"))
+    if not candidates:
+        raise FileNotFoundError("Audiveris produced no MusicXML")
+
+    return candidates[0]
+
+# ----------------------------------------
+# MuseScore Engraving
 # ----------------------------------------
 def get_musescore_style_args(style_path: Path | None) -> list[str]:
     if not style_path or not style_path.exists():
@@ -398,6 +417,7 @@ def get_musescore_style_args(style_path: Path | None) -> list[str]:
 
     env = os.environ.copy()
     env["QT_QPA_PLATFORM"] = "offscreen"
+
     help_result = subprocess.run(
         [MUSESCORE_CLI, "--help"],
         capture_output=True,
@@ -413,14 +433,12 @@ def get_musescore_style_args(style_path: Path | None) -> list[str]:
         return ["-s", str(style_path)]
     return []
 
-
 def run_musescore_to_pdf(musicxml_path: Path, out_dir: Path) -> Path:
     out_pdf = out_dir / f"{musicxml_path.stem}.pdf"
 
     env = os.environ.copy()
     env["QT_QPA_PLATFORM"] = "offscreen"
 
-    # Start virtual display
     xvfb = subprocess.Popen(
         ["Xvfb", ":99", "-screen", "0", "1280x1024x24"],
         stdout=subprocess.DEVNULL,
@@ -429,12 +447,12 @@ def run_musescore_to_pdf(musicxml_path: Path, out_dir: Path) -> Path:
     env["DISPLAY"] = ":99"
 
     try:
-        time.sleep(1)  # allow Xvfb to initialize
+        time.sleep(1)
 
         style_args = get_musescore_style_args(STYLE_FILE)
         cmd = [MUSESCORE_CLI, *style_args, str(musicxml_path), "-o", str(out_pdf)]
 
-        live_log("▶ MuseScore engraving (MusicXML → PDF)")
+        live_log("▶ MuseScore engraving")
         live_log(f"$ {' '.join(cmd)}")
 
         process = subprocess.Popen(
@@ -446,17 +464,14 @@ def run_musescore_to_pdf(musicxml_path: Path, out_dir: Path) -> Path:
         )
 
         start_time = time.time()
-        TIMEOUT = 120  # 2 minutes (adjust if needed)
+        TIMEOUT = 120  # 2 minutes
 
-        # Stream logs line-by-line
         for line in process.stdout:
             live_log(line.rstrip())
-
-            # Manual timeout check
             if time.time() - start_time > TIMEOUT:
                 process.kill()
                 live_log("❌ MuseScore timed out after 120 seconds")
-                raise TimeoutError("MuseScore timed out after 120 seconds")
+                raise TimeoutError("MuseScore timed out")
 
         process.wait()
 
@@ -467,119 +482,89 @@ def run_musescore_to_pdf(musicxml_path: Path, out_dir: Path) -> Path:
         live_log("✔ MuseScore engraving completed")
 
         if not out_pdf.exists():
-            raise FileNotFoundError("MuseScore did not produce a PDF")
+            raise FileNotFoundError("MuseScore produced no PDF")
 
         return out_pdf
 
     finally:
         xvfb.terminate()
 
-
 # ----------------------------------------
-# Audiveris: PDF → MusicXML (new)
+# Conversion Endpoints
 # ----------------------------------------
-def run_audiveris_on_pdf(pdf_path: Path, out_dir: Path) -> Path:
-    cmd = [
-        AUDIVERIS_CLI,
-        "-batch",
-        "-export",
-        "-output", str(out_dir),
-        str(pdf_path),
-    ]
-
-    # Use Popen for streaming logs
-    live_log("▶ Audiveris OMR (PDF → MusicXML)")
-    live_log(f"$ {' '.join(cmd)}")
-
-    process = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True
-    )
-
-    start_time = time.time()
-    TIMEOUT = 900  # 15 minutes
-
-    # Stream logs line-by-line
-    for line in process.stdout:
-        live_log(line.rstrip())
-
-        # Manual timeout check
-        if time.time() - start_time > TIMEOUT:
-            process.kill()
-            live_log("❌ Audiveris timed out after 900 seconds")
-            raise TimeoutError("Audiveris timed out after 900 seconds")
-
-    process.wait()
-
-    if process.returncode != 0:
-        live_log(f"❌ Audiveris failed with code {process.returncode}")
-        raise RuntimeError(f"Audiveris failed (exit {process.returncode})")
-
-    live_log("✔ Audiveris OMR completed")
-
-    # Find MusicXML output
-    candidates = list(out_dir.glob("*.xml")) + list(out_dir.glob("*.mxl"))
-    if not candidates:
-        raise FileNotFoundError("Audiveris did not produce any MusicXML file")
-
-    return candidates[0]
-
-@app.get("/debug-logs")
-def debug_logs():
-    return {"logs": LIVE_LOGS[-200:]}  # last 200 lines
-
-@app.post("/convert-pdf")
-async def convert_pdf(
+@app.post("/convert")
+async def convert(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     original_instrument: str = Form(...),
     final_instrument: str = Form(...),
 ):
+    job_id = str(uuid.uuid4())
+    update_progress(job_id, "reading_pdf")
+
     filename = file.filename or ""
     if not filename.lower().endswith(".pdf"):
+        update_progress(job_id, "error")
         return JSONResponse(
             status_code=422,
-            content={"error": "Please upload a PDF file (.pdf)"}
+            content={"error": "Please upload a PDF file (.pdf)", "job_id": job_id}
         )
 
-    temp_dir = Path(tempfile.mkdtemp(prefix="museconvert_pdf_"))
+    temp_dir = Path(tempfile.mkdtemp(prefix="museconvert_"))
 
     try:
-        # Save uploaded PDF
         pdf_path = temp_dir / filename
         pdf_path.write_bytes(await file.read())
 
-        # STEP 1 — PDF → MusicXML (Audiveris)
+        # STEP 1 — PDF → MusicXML
+        update_progress(job_id, "extracting_music")
         musicxml_path = run_audiveris_on_pdf(pdf_path, temp_dir)
 
-        # STEP 2 — MusicXML → transposed MusicXML 
+        # STEP 2 — Transpose
+        update_progress(job_id, "transposing")
         new_score = process_score(
             musicxml_path,
             original_instrument,
             final_instrument,
             musicxml_path.stem
         )
-
         transposed_xml = temp_dir / f"transposed_{musicxml_path.stem}.musicxml"
         new_score.write("musicxml", fp=str(transposed_xml))
 
-        # STEP 3 — MusicXML → PDF (MuseScore)
+        # STEP 3 — MusicXML → PDF
+        update_progress(job_id, "generating_pdf")
         pdf_out = run_musescore_to_pdf(transposed_xml, temp_dir)
 
-        # Cleanup
+        # Save final PDF persistently
+        final_pdf_path = STORAGE_DIR / f"{job_id}.pdf"
+        shutil.copy(pdf_out, final_pdf_path)
+
+        update_progress(job_id, "done")
+
         background_tasks.add_task(shutil.rmtree, str(temp_dir), True)
 
-        return FileResponse(
-            path=str(pdf_out),
-            filename=f"converted_{pdf_path.stem}.pdf",
-            media_type="application/pdf",
-        )
+        return {
+            "job_id": job_id,
+            "download_url": f"/download/{job_id}",
+            "status": "completed"
+        }
 
     except Exception as e:
+        update_progress(job_id, "error")
         shutil.rmtree(temp_dir, ignore_errors=True)
         return JSONResponse(
             status_code=500,
-            content={"error": str(e)[:500]}
+            content={"error": str(e)[:500], "job_id": job_id}
         )
+
+@app.get("/download/{job_id}")
+def download(job_id: str):
+    pdf_path = STORAGE_DIR / f"{job_id}.pdf"
+    if not pdf_path.exists():
+        return JSONResponse(status_code=404, content={"error": "PDF not found"})
+
+    return FileResponse(
+        path=str(pdf_path),
+        filename=f"converted_{job_id}.pdf",
+        media_type="application/pdf"
+    )
