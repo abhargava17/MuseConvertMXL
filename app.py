@@ -504,11 +504,9 @@ async def convert(
 
     filename = file.filename or ""
     if not filename.lower().endswith(".pdf"):
-        update_progress(job_id, "error")
-        return JSONResponse(
-            status_code=422,
-            content={"error": "Please upload a PDF file (.pdf)", "job_id": job_id}
-        )
+        return fail(job_id, "input", "File must be a PDF.")
+
+    original_stem = Path(filename).stem
 
     temp_dir = Path(tempfile.mkdtemp(prefix="museconvert_"))
 
@@ -518,26 +516,42 @@ async def convert(
 
         # STEP 1 — PDF → MusicXML
         update_progress(job_id, "extracting_music")
-        musicxml_path = run_audiveris_on_pdf(pdf_path, temp_dir)
+        try:
+            musicxml_path = run_audiveris_on_pdf(pdf_path, temp_dir)
+        except Exception:
+            return fail(job_id, "audiveris", "Could not read the PDF. Try uploading a clearer scan or a digitally exported PDF.")
 
         # STEP 2 — Transpose
         update_progress(job_id, "transposing")
-        new_score = process_score(
-            musicxml_path,
-            original_instrument,
-            final_instrument,
-            musicxml_path.stem
-        )
+        try:
+            new_score = process_score(
+                musicxml_path,
+                original_instrument,
+                final_instrument,
+                musicxml_path.stem
+            )
+        except Exception:
+            return fail(job_id, "music21", "Music extraction failed. The PDF may be incomplete or missing staff lines.")
+
         transposed_xml = temp_dir / f"transposed_{musicxml_path.stem}.musicxml"
         new_score.write("musicxml", fp=str(transposed_xml))
 
         # STEP 3 — MusicXML → PDF
         update_progress(job_id, "generating_pdf")
-        pdf_out = run_musescore_to_pdf(transposed_xml, temp_dir)
+        try:
+            pdf_out = run_musescore_to_pdf(transposed_xml, temp_dir)
+        except Exception:
+            return fail(job_id, "musescore", "PDF generation failed. Try uploading a different file.")
 
         # Save final PDF persistently
         final_pdf_path = STORAGE_DIR / f"{job_id}.pdf"
         shutil.copy(pdf_out, final_pdf_path)
+
+        # Save metadata
+        metadata_path = STORAGE_DIR / f"{job_id}.json"
+        metadata_path.write_text(json.dumps({
+            "original_stem": original_stem
+        }))
 
         update_progress(job_id, "done")
 
@@ -549,22 +563,28 @@ async def convert(
             "status": "completed"
         }
 
-    except Exception as e:
-        update_progress(job_id, "error")
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        return JSONResponse(
-            status_code=500,
-            content={"error": str(e)[:500], "job_id": job_id}
-        )
+    except Exception:
+        return fail(job_id, "error", "An unexpected error occurred. Please try again.")
 
+# ----------------------------------------
+# Download endpoint
+# ----------------------------------------
 @app.get("/download/{job_id}")
 def download(job_id: str):
     pdf_path = STORAGE_DIR / f"{job_id}.pdf"
+    metadata_path = STORAGE_DIR / f"{job_id}.json"
+
     if not pdf_path.exists():
-        return JSONResponse(status_code=404, content={"error": "PDF not found"})
+        return JSONResponse({"error": "PDF not found"})
+
+    if metadata_path.exists():
+        meta = json.loads(metadata_path.read_text())
+        original_stem = meta.get("original_stem", job_id)
+    else:
+        original_stem = job_id
 
     return FileResponse(
         path=str(pdf_path),
-        filename=f"converted_{job_id}.pdf",
+        filename=f"converted_{original_stem}.pdf",
         media_type="application/pdf"
     )
