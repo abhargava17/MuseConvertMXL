@@ -502,15 +502,14 @@ async def convert(
     job_id = str(uuid.uuid4())
     update_progress(job_id, "reading_pdf")
 
-    filename = file.filename or ""
-    if not filename.lower().endswith(".pdf"):
-        return fail(job_id, "input", "File must be a PDF.")
-
-    original_stem = Path(filename).stem
-
-    temp_dir = Path(tempfile.mkdtemp(prefix="museconvert_"))
-
     try:
+        filename = file.filename or ""
+        if not filename.lower().endswith(".pdf"):
+            return fail(job_id, "input", "File must be a PDF.")
+
+        original_stem = Path(filename).stem
+        temp_dir = Path(tempfile.mkdtemp(prefix="museconvert_"))
+
         pdf_path = temp_dir / filename
         pdf_path.write_bytes(await file.read())
 
@@ -563,8 +562,8 @@ async def convert(
             "status": "completed"
         }
 
-    except Exception:
-        return fail(job_id, "error", "An unexpected error occurred. Please try again.")
+    except Exception as e:
+        return fail(job_id, "error", f"Unexpected failure: {str(e)[:200]}")
 
 # ----------------------------------------
 # Download endpoint
