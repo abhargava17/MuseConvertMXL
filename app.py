@@ -502,88 +502,72 @@ async def convert(
     job_id = str(uuid.uuid4())
     update_progress(job_id, "reading_pdf")
 
+    filename = file.filename or ""
+    if not filename.lower().endswith(".pdf"):
+        update_progress(job_id, "error")
+        return JSONResponse(
+            status_code=422,
+            content={"error": "Please upload a PDF file (.pdf)", "job_id": job_id}
+        )
+
+    # ⭐ ADD THIS
+    original_stem = Path(filename).stem
+
+    temp_dir = Path(tempfile.mkdtemp(prefix="museconvert_"))
+
     try:
-        filename = file.filename or ""
-        if not filename.lower().endswith(".pdf"):
-            return fail(job_id, "input", "File must be a PDF.")
-
-        original_stem = Path(filename).stem
-        temp_dir = Path(tempfile.mkdtemp(prefix="museconvert_"))
-
         pdf_path = temp_dir / filename
         pdf_path.write_bytes(await file.read())
 
-        # STEP 1 — PDF → MusicXML
         update_progress(job_id, "extracting_music")
-        try:
-            musicxml_path = run_audiveris_on_pdf(pdf_path, temp_dir)
-        except Exception:
-            return fail(job_id, "audiveris", "Could not read the PDF. Try uploading a clearer scan or a digitally exported PDF.")
+        musicxml_path = run_audiveris_on_pdf(pdf_path, temp_dir)
 
-        # STEP 2 — Transpose
         update_progress(job_id, "transposing")
-        try:
-            new_score = process_score(
-                musicxml_path,
-                original_instrument,
-                final_instrument,
-                musicxml_path.stem
-            )
-        except Exception:
-            return fail(job_id, "music21", "Music extraction failed. The PDF may be incomplete or missing staff lines.")
+        new_score = process_score(
+            musicxml_path,
+            original_instrument,
+            final_instrument,
+            musicxml_path.stem
+        )
 
         transposed_xml = temp_dir / f"transposed_{musicxml_path.stem}.musicxml"
         new_score.write("musicxml", fp=str(transposed_xml))
 
-        # STEP 3 — MusicXML → PDF
         update_progress(job_id, "generating_pdf")
-        try:
-            pdf_out = run_musescore_to_pdf(transposed_xml, temp_dir)
-        except Exception:
-            return fail(job_id, "musescore", "PDF generation failed. Try uploading a different file.")
+        pdf_out = run_musescore_to_pdf(transposed_xml, temp_dir)
 
-        # Save final PDF persistently
         final_pdf_path = STORAGE_DIR / f"{job_id}.pdf"
         shutil.copy(pdf_out, final_pdf_path)
 
-        # Save metadata
-        metadata_path = STORAGE_DIR / f"{job_id}.json"
-        metadata_path.write_text(json.dumps({
-            "original_stem": original_stem
-        }))
-
         update_progress(job_id, "done")
-
         background_tasks.add_task(shutil.rmtree, str(temp_dir), True)
 
+        # ⭐ MODIFY THIS RETURN
         return {
             "job_id": job_id,
-            "download_url": f"/download/{job_id}",
+            "original_stem": original_stem,
+            "download_url": f"/download/{job_id}?name={original_stem}&inst={final_instrument}",
             "status": "completed"
         }
 
     except Exception as e:
-        return fail(job_id, "error", f"Unexpected failure: {str(e)[:200]}")
+        update_progress(job_id, "error")
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)[:500], "job_id": job_id}
+        )
 
-# ----------------------------------------
-# Download endpoint
-# ----------------------------------------
 @app.get("/download/{job_id}")
-def download(job_id: str):
+def download(job_id: str, name: str = None):
     pdf_path = STORAGE_DIR / f"{job_id}.pdf"
-    metadata_path = STORAGE_DIR / f"{job_id}.json"
-
     if not pdf_path.exists():
-        return JSONResponse({"error": "PDF not found"})
+        return JSONResponse(status_code=404, content={"error": "PDF not found"})
 
-    if metadata_path.exists():
-        meta = json.loads(metadata_path.read_text())
-        original_stem = meta.get("original_stem", job_id)
-    else:
-        original_stem = job_id
+    safe_name = name or job_id
 
     return FileResponse(
         path=str(pdf_path),
-        filename=f"converted_{original_stem}.pdf",
+        filename=f"{safe_name}_{final_instrument}.pdf",
         media_type="application/pdf"
     )
